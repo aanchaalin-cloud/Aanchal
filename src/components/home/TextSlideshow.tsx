@@ -51,10 +51,10 @@ export function TextSlideshow() {
             }`}
           >
             <div className="text-center">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#800020]/10">
-                <slide.icon className="h-7 w-7 text-[#800020]" />
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#95271D]/10">
+                <slide.icon className="h-7 w-7 text-[#95271D]" />
               </div>
-              <p className="mt-6 text-xs font-semibold uppercase tracking-[0.2em] text-[#800020]">
+              <p className="mt-6 text-xs font-semibold uppercase tracking-[0.2em] text-[#D4A843]">
                 {slide.subtitle}
               </p>
               <h2 className="mt-3 font-serif text-3xl font-semibold text-[#1C1C1C] sm:text-4xl">
@@ -66,7 +66,7 @@ export function TextSlideshow() {
               <div className="mt-8">
                 <Link
                   href={slide.action.href}
-                  className="inline-flex items-center gap-2 rounded bg-[#800020] px-6 py-3 text-sm font-medium text-white hover:bg-[#66001A] transition-colors"
+                  className="inline-flex items-center gap-2 rounded bg-[#95271D] px-6 py-3 text-sm font-medium text-[#D4A843] hover:bg-[#7A1F17] transition-colors"
                 >
                   {slide.action.label}
                   <ArrowRight className="h-4 w-4" />
@@ -83,7 +83,7 @@ export function TextSlideshow() {
               type="button"
               onClick={() => setCurrent(idx)}
               className={`h-2 rounded-full transition-all ${
-                idx === current ? "w-8 bg-[#800020]" : "w-2 bg-[#E5D5C5]"
+                idx === current ? "w-8 bg-[#95271D]" : "w-2 bg-[#E5D5C5]"
               }`}
               aria-label={`Go to slide ${idx + 1}`}
             />
