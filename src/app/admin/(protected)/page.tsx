@@ -3,6 +3,8 @@ import { Package, ShoppingCart, TrendingUp, AlertTriangle } from "lucide-react";
 import { Messages } from "@/lib/messages";
 import { createClient } from "@/lib/supabase/server";
 
+export const dynamic = "force-dynamic";
+
 export default async function AdminDashboardPage() {
   const supabase = await createClient();
 

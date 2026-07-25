@@ -41,7 +41,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       .update(rawBody)
       .digest("hex");
 
-    if (expectedSignature !== signature) {
+    const expectedBuf = Buffer.from(expectedSignature, "hex");
+    const providedBuf = Buffer.from(signature, "hex");
+    if (expectedBuf.length !== providedBuf.length || !crypto.timingSafeEqual(expectedBuf, providedBuf)) {
       console.warn("[webhook] Signature mismatch");
       return NextResponse.json(
         { error: "Invalid signature" },

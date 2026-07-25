@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  outputFileTracingRoot: process.cwd(),
+  outputFileTracingRoot: __dirname,
   productionBrowserSourceMaps: false,
   images: {
     remotePatterns: [
@@ -37,7 +37,7 @@ const nextConfig: NextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' https://checkout.razorpay.com 'unsafe-inline' 'unsafe-eval'",
+              "script-src 'self' https://checkout.razorpay.com 'unsafe-inline'",
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' https://*.supabase.co data: blob:",
               "font-src 'self' https://fonts.gstatic.com",

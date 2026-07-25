@@ -228,7 +228,6 @@ export async function getProductByIdAdmin(
 
 /**
  * Fetch related products (same category, excluding current product).
- * Falls back to latest featured products if insufficient category matches.
  */
 export async function getRelatedProducts(
   currentProductId: string,
@@ -253,34 +252,4 @@ export async function getRelatedProducts(
     .limit(limit);
 
   return ((sameCategory ?? []) as ProductWithDetails[]).map(filterActiveVariants);
-}
-
-/**
- * Fetch all active products with images for shop listing.
- */
-export async function getActiveProductsWithImages(): Promise<
-  ProductWithDetails[]
-> {
-  if (!isSupabaseConfigured()) return [];
-
-  const supabase = await createClient();
-
-  const { data, error } = await supabase
-    .from("products")
-    .select(
-      `
-      *,
-      product_images ( id, url, alt_text, position ),
-      product_variants ( id, size, color, color_hex, sku, stock, is_active )
-    `
-    )
-    .eq("is_active", true)
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    console.warn("[getActiveProductsWithImages]", error.message);
-    return [];
-  }
-
-  return ((data as ProductWithDetails[]) ?? []).map(filterActiveVariants);
 }

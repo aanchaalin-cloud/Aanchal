@@ -4,6 +4,8 @@ import { formatPrice, formatDate, getOrderStatusColor, getPaymentStatusColor } f
 import { Messages } from "@/lib/messages";
 import { OrderFilters } from "./OrderFilters";
 
+export const dynamic = "force-dynamic";
+
 type Props = {
   searchParams: Promise<{
     payment_status?: string;

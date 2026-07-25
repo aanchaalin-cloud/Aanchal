@@ -7,19 +7,16 @@ import Link from "next/link";
 const TOP_COLLECTIONS = [
   {
     name: "Black Anarkali",
-    price: "Rs. 2,500",
     image: "/black.jpeg",
     href: "/shop?category=Anarkali",
   },
   {
     name: "Red Anarkali",
-    price: "Rs. 2,500",
     image: "/red.jpeg",
     href: "/shop?category=Anarkali",
   },
   {
     name: "Blue Anarkali",
-    price: "Rs. 2,500",
     image: "/blue.jpeg",
     href: "/shop?category=Anarkali",
   },
@@ -184,7 +181,7 @@ export function CategoriesSection() {
                   </div>
                 </div>
 
-                {/* Price pill */}
+                {/* View overlay on hover/touch */}
                 <div
                   className={
                     "absolute bottom-4 left-1/2 -translate-x-1/2 z-20 rounded-full bg-white/90 backdrop-blur-sm px-5 py-1.5 shadow-md transition-all duration-300 " +
@@ -194,7 +191,7 @@ export function CategoriesSection() {
                   }
                 >
                   <span className="text-sm font-semibold text-[#800020]">
-                    {item.price}
+                    View Collection
                   </span>
                 </div>
               </div>
@@ -204,7 +201,6 @@ export function CategoriesSection() {
                 <h3 className="text-lg font-medium text-[#1C1C1C] group-hover:text-[#800020] transition-colors">
                   {item.name}
                 </h3>
-                <p className="mt-1 text-sm text-[#6B6B6B]">{item.price}</p>
               </div>
             </Link>
           ))}

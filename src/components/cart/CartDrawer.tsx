@@ -12,6 +12,7 @@ export function CartDrawer() {
     items,
     isOpen,
     isHydrated,
+    itemCount,
     closeCart,
     removeItem,
     updateQuantity,
@@ -33,7 +34,7 @@ export function CartDrawer() {
           <div className="flex items-center gap-2">
             <ShoppingBag className="h-5 w-5 text-[#1C1C1C]" />
             <h2 className="font-medium text-[#1C1C1C]">
-              Your Cart ({items.length})
+              Your Cart ({itemCount})
             </h2>
           </div>
           <button

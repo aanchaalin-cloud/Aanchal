@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
 import { createServiceClient } from "@/lib/supabase/server";
 import { Messages } from "@/lib/messages";
 import { requireAdmin, validateRequest } from "@/lib/api-utils";
+import { orderStatusSchema } from "@/lib/validations";
+import { z } from "zod";
 
 const updateStatusSchema = z.object({
   orderId: z.string().uuid("Invalid order ID"),
-  order_status: z.enum(["pending", "paid", "processing", "shipped", "delivered", "cancelled", "refunded"]),
+  order_status: orderStatusSchema.shape.order_status,
 });
 
 export async function POST(request: NextRequest): Promise<NextResponse> {

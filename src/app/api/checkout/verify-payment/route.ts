@@ -17,7 +17,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const expectedSignature = crypto.createHmac("sha256", razorpaySecret).update(`${razorpayOrderId}|${razorpayPaymentId}`).digest("hex");
-  if (expectedSignature !== razorpaySignature) {
+  const sigBuf = Buffer.from(expectedSignature, "hex");
+  const providedBuf = Buffer.from(razorpaySignature, "hex");
+  if (sigBuf.length !== providedBuf.length || !crypto.timingSafeEqual(sigBuf, providedBuf)) {
     console.warn("[verify-payment] Signature mismatch:", orderId);
     return NextResponse.json({ success: false, error: Messages.paymentVerificationFailed }, { status: 400 });
   }

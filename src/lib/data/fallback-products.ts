@@ -1,6 +1,7 @@
 import type { ProductWithDetails } from "@/types";
 
-const now = new Date().toISOString();
+// Fixed date for static fallback data — avoids stale timestamps from module-level evaluation.
+const now = "2025-01-01T00:00:00.000Z";
 
 export const FALLBACK_PRODUCTS: ProductWithDetails[] = [
   {

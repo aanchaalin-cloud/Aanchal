@@ -109,27 +109,6 @@ export const productSchema = z.object({
 export type ProductInput = z.infer<typeof productSchema>;
 
 // ============================================================
-// VARIANT SCHEMA (Admin)
-// ============================================================
-export const variantSchema = z.object({
-  size: z.string().max(50).optional(),
-  color: z.string().max(100).optional(),
-  color_hex: z
-    .string()
-    .regex(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/, "Invalid hex color")
-    .optional()
-    .or(z.literal("")),
-  sku: z.string().max(100).optional(),
-  stock: z
-    .number()
-    .int("Stock must be a whole number")
-    .min(0, "Stock cannot be negative")
-    .max(10000, "Stock value is too high"),
-});
-
-export type VariantInput = z.infer<typeof variantSchema>;
-
-// ============================================================
 // ADMIN PRODUCT CREATE / UPDATE SCHEMA (includes images + variants)
 // ============================================================
 export const productCreateSchema = z.object({
@@ -199,12 +178,4 @@ export const orderStatusSchema = z.object({
 
 export type OrderStatusInput = z.infer<typeof orderStatusSchema>;
 
-// ============================================================
-// ADMIN LOGIN SCHEMA
-// ============================================================
-export const adminLoginSchema = z.object({
-  email: z.string().email("Invalid email address"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
-});
 
-export type AdminLoginInput = z.infer<typeof adminLoginSchema>;

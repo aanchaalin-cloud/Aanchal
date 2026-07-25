@@ -73,10 +73,10 @@ export default function ContactPage() {
             <div>
               <p className="text-sm font-medium text-[#1C1C1C]">Phone / WhatsApp</p>
               <a
-                href="tel:+919876543210"
+                href="tel:+918949911242"
                 className="text-sm text-[#6B6B6B] hover:text-[#800020] transition-colors"
               >
-                +91 98765 43210
+                +91 89499 11242
               </a>
               <p className="mt-1 text-xs text-[#6B6B6B]">
                 Mon–Sat, 10 AM – 6 PM IST

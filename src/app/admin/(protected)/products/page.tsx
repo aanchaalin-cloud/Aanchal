@@ -5,6 +5,8 @@ import { getAllProductsAdmin } from "@/lib/queries/products";
 import { Messages } from "@/lib/messages";
 import { formatPrice, getPrimaryImageUrl } from "@/lib/utils";
 
+export const dynamic = "force-dynamic";
+
 export default async function AdminProductsPage() {
   const products = await getAllProductsAdmin();
 

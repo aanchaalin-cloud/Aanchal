@@ -4,6 +4,8 @@ import { getOrderByIdAdmin } from "@/lib/queries/orders";
 import { formatPrice, formatDate, getOrderStatusLabel, getOrderStatusColor, getPaymentStatusColor } from "@/lib/utils";
 import { OrderStatusUpdater } from "@/components/admin/OrderStatusUpdater";
 
+export const dynamic = "force-dynamic";
+
 type Props = { params: Promise<{ id: string }> };
 
 export default async function AdminOrderDetailPage({ params }: Props) {

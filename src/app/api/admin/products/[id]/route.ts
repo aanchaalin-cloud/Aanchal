@@ -71,3 +71,31 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
   return NextResponse.json({ success: true, data: { message: "Product updated" } });
 }
+
+export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<NextResponse> {
+  const productId = (await params).id;
+
+  const auth = await requireAdmin();
+  if (auth instanceof NextResponse) return auth;
+
+  const serviceClient = await createServiceClient();
+
+  const { data: existingProduct } = await serviceClient.from("products").select("id").eq("id", productId).single();
+  if (!existingProduct) {
+    return NextResponse.json({ success: false, error: Messages.adminProductNotFound }, { status: 404 });
+  }
+
+  // Soft-delete: deactivate the product rather than removing rows.
+  // This preserves referential integrity with existing orders.
+  const { error } = await serviceClient
+    .from("products")
+    .update({ is_active: false })
+    .eq("id", productId);
+
+  if (error) {
+    console.error("[admin-delete-product]", error.message);
+    return NextResponse.json({ success: false, error: Messages.adminUpdateProductError }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true, data: { message: "Product deactivated" } });
+}

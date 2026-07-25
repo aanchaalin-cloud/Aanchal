@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 import { getProductByIdAdmin } from "@/lib/queries/products";
 import { ProductForm } from "@/components/admin/ProductForm";
 
+export const dynamic = "force-dynamic";
+
 type Props = { params: Promise<{ id: string }> };
 
 export default async function EditProductPage({ params }: Props) {

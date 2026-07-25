@@ -99,10 +99,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const shippingFee = subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_FEE;
   const totalAmount = subtotal + shippingFee;
 
-  const razorpayOrder = await razorpay.orders.create({
-    amount: rupeesToPaise(totalAmount), currency: "INR", receipt: `rcpt_${Date.now()}`,
-    notes: { customer_name, customer_email },
-  });
+  let razorpayOrder: { id: string };
+  try {
+    razorpayOrder = await razorpay.orders.create({
+      amount: rupeesToPaise(totalAmount), currency: "INR", receipt: `rcpt_${Date.now()}`,
+      notes: { customer_name, customer_email },
+    });
+  } catch (err) {
+    console.error("[create-order] Razorpay order creation failed:", err);
+    return NextResponse.json({ success: false, error: Messages.paymentNotConfigured }, { status: 502 });
+  }
 
   const { data: order } = await supabase.from("orders").insert({
     customer_name, customer_email, customer_phone, address_line1, address_line2: address_line2 ?? null,

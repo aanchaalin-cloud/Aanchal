@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { AdminNav } from "@/components/admin/AdminNav";
 
+// Auth is enforced by middleware — this layout only fetches the user for the nav bar.
 export default async function ProtectedAdminLayout({
   children,
 }: {
@@ -13,23 +14,10 @@ export default async function ProtectedAdminLayout({
   }
 
   const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) {
     redirect("/admin/login");
-  }
-
-  const { data: adminRecord } = await supabase
-    .from("admin_users")
-    .select("id")
-    .eq("id", user.id)
-    .single();
-
-  if (!adminRecord) {
-    redirect("/admin/login?unauthorized=true");
   }
 
   return (
