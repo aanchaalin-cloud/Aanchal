@@ -1,0 +1,286 @@
+import { createClient } from "@/lib/supabase/server";
+import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { Messages } from "@/lib/messages";
+import type { ProductWithDetails, Product } from "@/types";
+
+export type ProductQueryResult<T> =
+  | { data: T; error: null }
+  | { data: null; error: string };
+
+function filterActiveVariants<T extends ProductWithDetails>(product: T): T {
+  return {
+    ...product,
+    product_variants: product.product_variants.filter(
+      (v) => v.is_active !== false
+    ),
+  };
+}
+
+const productDetailsSelect = `
+  *,
+  product_images ( id, product_id, url, alt_text, position, created_at ),
+  product_variants (
+    id, product_id, size, color, color_hex, sku, stock, is_active, created_at, updated_at
+  )
+`;
+
+export async function getActiveProductCatalog(): Promise<
+  ProductQueryResult<ProductWithDetails[]>
+> {
+  if (!isSupabaseConfigured()) {
+    return {
+      data: null,
+      error: Messages.productLoadError,
+    };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("products")
+    .select(productDetailsSelect)
+    .eq("is_active", true)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.warn("[getActiveProductCatalog]", error.message);
+    return { data: null, error: Messages.productLoadError };
+  }
+
+  const products = (data as ProductWithDetails[]) ?? [];
+  return { data: products.map(filterActiveVariants), error: null };
+}
+
+export async function getActiveProductBySlug(
+  slug: string
+): Promise<ProductQueryResult<ProductWithDetails>> {
+  if (!isSupabaseConfigured()) {
+    return {
+      data: null,
+      error: Messages.productNotFound,
+    };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("products")
+    .select(productDetailsSelect)
+    .eq("slug", slug)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (error) {
+    console.warn("[getActiveProductBySlug]", error.message);
+    return { data: null, error: Messages.productNotFound };
+  }
+  if (!data) {
+    return { data: null, error: "PRODUCT_NOT_FOUND" };
+  }
+
+  return { data: filterActiveVariants(data as ProductWithDetails), error: null };
+}
+
+/**
+ * Fetch all active products for the public shop page.
+ * Uses anon key + RLS — only returns is_active = true.
+ */
+export async function getActiveProducts(): Promise<Product[]> {
+  if (!isSupabaseConfigured()) return [];
+
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("products")
+    .select("*")
+    .eq("is_active", true)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.warn("[getActiveProducts]", error.message);
+    return [];
+  }
+
+  return data ?? [];
+}
+
+/**
+ * Fetch featured active products for homepage.
+ */
+export async function getFeaturedProducts(): Promise<ProductWithDetails[]> {
+  if (!isSupabaseConfigured()) return [];
+
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("products")
+    .select(
+      `
+      *,
+      product_images ( id, url, alt_text, position ),
+      product_variants ( id, size, color, color_hex, sku, stock, is_active )
+    `
+    )
+    .eq("is_active", true)
+    .eq("is_featured", true)
+    .order("created_at", { ascending: false })
+    .limit(6);
+
+  if (error) {
+    console.warn("[getFeaturedProducts]", error.message);
+    return [];
+  }
+
+  return ((data as ProductWithDetails[]) ?? []).map(filterActiveVariants);
+}
+
+/**
+ * Fetch a single active product by slug with images and variants.
+ * Used for the product detail page.
+ */
+export async function getProductBySlug(
+  slug: string
+): Promise<ProductWithDetails | null> {
+  if (!isSupabaseConfigured()) return null;
+
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("products")
+    .select(
+      `
+      *,
+      product_images ( id, url, alt_text, position ),
+      product_variants ( id, size, color, color_hex, sku, stock, is_active )
+    `
+    )
+    .eq("slug", slug)
+    .eq("is_active", true)
+    .single();
+
+  if (error) {
+    if (error.code !== "PGRST116") {
+      // PGRST116 = no rows returned — not a real error
+      console.warn("[getProductBySlug]", error.message);
+    }
+    return null;
+  }
+
+  return filterActiveVariants(data as ProductWithDetails);
+}
+
+/**
+ * Fetch all products (active + inactive) for admin.
+ * Uses server client with admin session — RLS allows admin to read all.
+ */
+export async function getAllProductsAdmin(): Promise<ProductWithDetails[]> {
+  if (!isSupabaseConfigured()) return [];
+
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("products")
+    .select(
+      `
+      *,
+      product_images ( id, url, alt_text, position ),
+      product_variants ( id, size, color, color_hex, sku, stock, is_active )
+    `
+    )
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.warn("[getAllProductsAdmin]", error.message);
+    return [];
+  }
+
+  return (data as ProductWithDetails[]) ?? [];
+}
+
+/**
+ * Fetch a single product by ID for admin editing.
+ * Admin can access inactive products.
+ */
+export async function getProductByIdAdmin(
+  id: string
+): Promise<ProductWithDetails | null> {
+  if (!isSupabaseConfigured()) return null;
+
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("products")
+    .select(
+      `
+      *,
+      product_images ( id, url, alt_text, position ),
+      product_variants ( id, size, color, color_hex, sku, stock, is_active )
+    `
+    )
+    .eq("id", id)
+    .single();
+
+  if (error) {
+    console.warn("[getProductByIdAdmin]", error.message);
+    return null;
+  }
+
+  return data as ProductWithDetails;
+}
+
+/**
+ * Fetch related products (same category, excluding current product).
+ * Falls back to latest featured products if insufficient category matches.
+ */
+export async function getRelatedProducts(
+  currentProductId: string,
+  category: string,
+  limit = 4
+): Promise<ProductWithDetails[]> {
+  if (!isSupabaseConfigured()) return [];
+
+  const supabase = await createClient();
+
+  const { data: sameCategory } = await supabase
+    .from("products")
+    .select(`
+      *,
+      product_images ( id, url, alt_text, position ),
+      product_variants ( id, size, color, color_hex, sku, stock, is_active )
+    `)
+    .eq("is_active", true)
+    .eq("category", category)
+    .neq("id", currentProductId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  return ((sameCategory ?? []) as ProductWithDetails[]).map(filterActiveVariants);
+}
+
+/**
+ * Fetch all active products with images for shop listing.
+ */
+export async function getActiveProductsWithImages(): Promise<
+  ProductWithDetails[]
+> {
+  if (!isSupabaseConfigured()) return [];
+
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("products")
+    .select(
+      `
+      *,
+      product_images ( id, url, alt_text, position ),
+      product_variants ( id, size, color, color_hex, sku, stock, is_active )
+    `
+    )
+    .eq("is_active", true)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.warn("[getActiveProductsWithImages]", error.message);
+    return [];
+  }
+
+  return ((data as ProductWithDetails[]) ?? []).map(filterActiveVariants);
+}

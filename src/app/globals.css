@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --background: 30 40% 96%;
+    --foreground: 0 0% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 11%;
+    --primary: 345 67% 25%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 30 40% 96%;
+    --secondary-foreground: 345 67% 25%;
+    --muted: 30 20% 94%;
+    --muted-foreground: 0 0% 42%;
+    --accent: 345 67% 25%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 350 65% 48%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 30 25% 83%;
+    --input: 30 25% 83%;
+    --ring: 345 67% 25%;
+    --radius: 0.25rem;
+    --font-sans: "Hind", system-ui, sans-serif;
+    --font-serif: "Eczar", Georgia, serif;
+
+    --beige: 39 65% 85%;
+    --beige-foreground: 39 20% 20%;
+  }
+}
+
+@layer base {
+  * {
+    border-color: #E5D5C5;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    transition: background-color 0.4s ease, color 0.4s ease;
+    background-color: #FFF8F3;
+    background-image: url("/bg.png");
+    background-attachment: fixed;
+    background-position: center;
+    background-size: cover;
+    color: #1C1C1C;
+  }
+
+  h1, h2, h3 {
+    font-family: var(--font-serif);
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  :focus-visible {
+    outline: 2px solid #800020;
+    outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  .font-serif {
+    font-family: var(--font-serif);
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .bg-surface {
+    background-color: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(8px);
+  }
+}

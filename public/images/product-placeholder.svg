@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 800" role="img" aria-labelledby="title description">
+  <title id="title">Product image placeholder</title>
+  <desc id="description">A warm placeholder shown when a product image is unavailable.</desc>
+  <rect width="600" height="800" fill="#F7EFE5"/>
+  <path d="M230 350h140l20 210H210l20-210Z" fill="none" stroke="#E7D3C0" stroke-width="12"/>
+  <path d="M260 360v-35c0-22 18-40 40-40s40 18 40 40v35" fill="none" stroke="#E7D3C0" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="300" cy="300" r="80" fill="none" stroke="#E7D3C0" stroke-width="1" opacity="0.3"/>
+  <circle cx="300" cy="300" r="120" fill="none" stroke="#E7D3C0" stroke-width="0.5" opacity="0.2"/>
+  <line x1="260" y1="280" x2="340" y2="280" stroke="#E7D3C0" stroke-width="0.5" opacity="0.2"/>
+  <line x1="260" y1="320" x2="340" y2="320" stroke="#E7D3C0" stroke-width="0.5" opacity="0.2"/>
+  <text x="300" y="625" fill="#9A5B37" font-family="Georgia, serif" font-size="22" text-anchor="middle">Aanchal</text>
+  <text x="300" y="650" fill="#7B6A5C" font-family="system-ui, sans-serif" font-size="14" text-anchor="middle">Image coming soon</text>
+</svg>
