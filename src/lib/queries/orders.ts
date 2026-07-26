@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
-import type { OrderWithItems } from "@/types";
+import type { OrderWithItems, OrderWithMeasurements, OrderStatusHistoryEntry } from "@/types";
 
 /**
  * Fetch all orders for admin order management.
@@ -35,11 +35,11 @@ export async function getAllOrdersAdmin(): Promise<OrderWithItems[]> {
 }
 
 /**
- * Fetch a single order by ID for admin.
+ * Fetch a single order by ID for admin, including measurements.
  */
 export async function getOrderByIdAdmin(
   id: string
-): Promise<OrderWithItems | null> {
+): Promise<OrderWithMeasurements | null> {
   if (!isSupabaseConfigured()) return null;
 
   const supabase = await createClient();
@@ -54,6 +54,9 @@ export async function getOrderByIdAdmin(
         product_name, product_slug, image_url,
         size, color, sku,
         unit_price, quantity, line_total
+      ),
+      order_measurements (
+        id, chest, waist, full_height, unit, personalisation_request
       )
     `
     )
@@ -65,5 +68,38 @@ export async function getOrderByIdAdmin(
     return null;
   }
 
-  return data as OrderWithItems;
+  const order = data as Record<string, unknown>;
+  const measurements = order.order_measurements;
+  const normalizedMeasurements = Array.isArray(measurements)
+    ? (measurements[0] ?? null)
+    : measurements;
+
+  return {
+    ...order,
+    order_measurements: normalizedMeasurements,
+  } as OrderWithMeasurements;
+}
+
+/**
+ * Fetch order status history for admin.
+ */
+export async function getOrderStatusHistory(
+  orderId: string
+): Promise<OrderStatusHistoryEntry[]> {
+  if (!isSupabaseConfigured()) return [];
+
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("order_status_history")
+    .select("id, order_id, old_status, new_status, changed_by, notes, created_at")
+    .eq("order_id", orderId)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    console.warn("[getOrderStatusHistory]", error.message);
+    return [];
+  }
+
+  return (data as OrderStatusHistoryEntry[]) ?? [];
 }

@@ -77,11 +77,15 @@ export function formatDate(dateString: string): string {
 export function getOrderStatusLabel(status: string): string {
   const labels: Record<string, string> = {
     pending: "Pending",
-    paid: "Paid",
-    processing: "Processing",
+    confirmed: "Confirmed",
+    in_production: "In Production",
+    ready_to_ship: "Ready to Ship",
     shipped: "Shipped",
+    out_for_delivery: "Out for Delivery",
     delivered: "Delivered",
     cancelled: "Cancelled",
+    return_requested: "Return Requested",
+    returned: "Returned",
     refunded: "Refunded",
   };
   return labels[status] ?? status;
@@ -93,11 +97,15 @@ export function getOrderStatusLabel(status: string): string {
 export function getOrderStatusColor(status: string): string {
   const colors: Record<string, string> = {
     pending: "bg-yellow-100 text-yellow-800",
-    paid: "bg-blue-100 text-blue-800",
-    processing: "bg-purple-100 text-purple-800",
+    confirmed: "bg-blue-100 text-blue-800",
+    in_production: "bg-purple-100 text-purple-800",
+    ready_to_ship: "bg-indigo-100 text-indigo-800",
     shipped: "bg-indigo-100 text-indigo-800",
+    out_for_delivery: "bg-orange-100 text-orange-800",
     delivered: "bg-green-100 text-green-800",
     cancelled: "bg-red-100 text-red-800",
+    return_requested: "bg-amber-100 text-amber-800",
+    returned: "bg-gray-100 text-gray-800",
     refunded: "bg-gray-100 text-gray-800",
   };
   return colors[status] ?? "bg-gray-100 text-gray-800";
@@ -109,9 +117,22 @@ export function getOrderStatusColor(status: string): string {
 export function getPaymentStatusColor(status: string): string {
   const colors: Record<string, string> = {
     pending: "bg-yellow-100 text-yellow-800",
+    partially_paid: "bg-orange-100 text-orange-800",
     paid: "bg-green-100 text-green-800",
     failed: "bg-red-100 text-red-800",
     refunded: "bg-gray-100 text-gray-800",
+    partially_refunded: "bg-amber-100 text-amber-800",
   };
   return colors[status] ?? "bg-gray-100 text-gray-800";
+}
+
+/**
+ * Get badge color class for payment method.
+ */
+export function getPaymentMethodLabel(method: string): string {
+  const labels: Record<string, string> = {
+    prepaid: "Full Prepaid",
+    cod: "50% Prepaid + COD",
+  };
+  return labels[method] ?? method;
 }

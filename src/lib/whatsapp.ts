@@ -1,18 +1,30 @@
 const WHATSAPP_NUMBER = "+918949911242";
 
-export function getWhatsAppUrl(productName: string): string {
-  const message = encodeURIComponent(
-    `Hi, I am here to buy this product: ${productName}`
-  );
-  return `https://wa.me/${WHATSAPP_NUMBER}?text=${message}`;
+/**
+ * Get a WhatsApp URL for direct messaging.
+ * Used for customer support contact only — not as a purchase flow.
+ */
+export function getWhatsAppUrl(productName?: string): string {
+  const message = productName
+    ? `Hi, I am here to buy this product: ${productName}`
+    : "Hi, I need help with my Aanchal order.";
+  return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
 }
 
-export function openWhatsApp(productName: string): void {
-  window.open(getWhatsAppUrl(productName), "_blank");
+/**
+ * Open WhatsApp in a new tab.
+ */
+export function openWhatsApp(productName?: string): void {
+  if (typeof window !== "undefined") {
+    window.open(getWhatsAppUrl(productName), "_blank");
+  }
 }
 
-export function isFallbackMode(): boolean {
-  return typeof window !== "undefined" && !window.location.hostname.includes("localhost")
-    ? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.includes("placeholder") ?? true
-    : false;
+/**
+ * Check if Supabase is configured (not in fallback mode).
+ */
+export function isSupabaseReady(): boolean {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  return !!(url && key && !url.includes("placeholder") && !key.includes("placeholder"));
 }

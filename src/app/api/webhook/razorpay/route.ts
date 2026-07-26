@@ -179,7 +179,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json({ status: "processed" });
   } catch (error) {
-    console.error("[webhook] Unexpected error:", error);
+    console.error("[webhook] Unexpected error:", error instanceof Error ? error.message : "unknown");
     return NextResponse.json(
       { error: Messages.genericError },
       { status: 500 }

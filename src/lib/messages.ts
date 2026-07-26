@@ -51,4 +51,24 @@ export const Messages = {
 
   invalidCredentials: "Invalid email or password.",
   authFailed: "Authentication failed.",
+
+  // Custom Fit
+  measurementsRequired: "Please provide your measurements to continue.",
+  measurementsSaved: "Your measurements have been saved.",
+
+  // Coupons
+  couponApplied: "Coupon applied successfully.",
+  couponInvalid: "This coupon code is invalid.",
+  couponExpired: "This coupon has expired.",
+  couponMinOrder: "This coupon requires a minimum order amount.",
+  couponUsageLimit: "This coupon has reached its usage limit.",
+  couponAlreadyUsed: "You have already used this coupon.",
+
+  // Reviews
+  reviewSubmitted: "Thank you for your review! It will be visible after approval.",
+  reviewLoadError: "Unable to load reviews right now.",
+
+  // Payment options
+  prepaidDiscountApplied: "5% prepaid discount applied",
+  codAmountDue: "Amount due at delivery",
 };

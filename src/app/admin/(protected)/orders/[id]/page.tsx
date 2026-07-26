@@ -1,8 +1,9 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getOrderByIdAdmin } from "@/lib/queries/orders";
-import { formatPrice, formatDate, getOrderStatusLabel, getOrderStatusColor, getPaymentStatusColor } from "@/lib/utils";
+import { getOrderByIdAdmin, getOrderStatusHistory } from "@/lib/queries/orders";
+import { formatPrice, formatDate, getOrderStatusLabel, getOrderStatusColor, getPaymentStatusColor, getPaymentMethodLabel } from "@/lib/utils";
 import { OrderStatusUpdater } from "@/components/admin/OrderStatusUpdater";
+import { Ruler, FileText } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,10 @@ type Props = { params: Promise<{ id: string }> };
 
 export default async function AdminOrderDetailPage({ params }: Props) {
   const { id } = await params;
-  const order = await getOrderByIdAdmin(id);
+  const [order, statusHistory] = await Promise.all([
+    getOrderByIdAdmin(id),
+    getOrderStatusHistory(id),
+  ]);
   if (!order) notFound();
 
   return (
@@ -20,7 +24,11 @@ export default async function AdminOrderDetailPage({ params }: Props) {
           <Link href="/admin/orders" className="text-sm text-stone-600 hover:text-stone-900">← Back to Orders</Link>
           <h1 className="mt-1 text-2xl font-semibold text-stone-900">Order {order.id.slice(0, 8)}…</h1>
         </div>
-        <OrderStatusUpdater orderId={order.id} currentStatus={order.order_status} />
+        <OrderStatusUpdater
+          orderId={order.id}
+          currentStatus={order.order_status}
+          packagingStatus={order.packaging_status}
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -50,21 +58,95 @@ export default async function AdminOrderDetailPage({ params }: Props) {
             </div>
           </div>
 
-          {/* Payment */}
+          {/* Payment Breakdown */}
           <div className="rounded-sm border border-stone-200 bg-white p-5">
-            <h2 className="text-sm font-semibold text-stone-900 mb-4">Payment</h2>
+            <h2 className="text-sm font-semibold text-stone-900 mb-4">Payment Breakdown</h2>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div><p className="text-stone-600">Subtotal</p><p className="font-medium">{formatPrice(order.subtotal)}</p></div>
-              <div><p className="text-stone-600">Shipping</p><p className="font-medium">{formatPrice(order.shipping_fee)}</p></div>
-              <div><p className="text-stone-600">Total</p><p className="font-semibold text-lg">{formatPrice(order.total_amount)}</p></div>
+              <div><p className="text-stone-600">Shipping</p><p className="font-medium">{order.shipping_fee === 0 ? "Free" : formatPrice(order.shipping_fee)}</p></div>
+              {order.discount_amount > 0 && (
+                <div><p className="text-stone-600">Discount</p><p className="font-medium text-green-600">-{formatPrice(order.discount_amount)}</p></div>
+              )}
+              <div><p className="text-stone-600 font-semibold">Total</p><p className="font-semibold text-lg">{formatPrice(order.total_amount)}</p></div>
+              <div>
+                <p className="text-stone-600">Payment Method</p>
+                <p className="font-medium">{getPaymentMethodLabel(order.payment_method)}</p>
+              </div>
               <div>
                 <p className="text-stone-600">Payment Status</p>
                 <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${getPaymentStatusColor(order.payment_status)}`}>{order.payment_status}</span>
               </div>
-              {order.razorpay_order_id && <div><p className="text-stone-600">Razorpay Order</p><p className="font-mono text-xs">{order.razorpay_order_id}</p></div>}
-              {order.razorpay_payment_id && <div><p className="text-stone-600">Razorpay Payment</p><p className="font-mono text-xs">{order.razorpay_payment_id}</p></div>}
+              <div><p className="text-stone-600">Paid Online</p><p className="font-medium">{formatPrice(order.prepaid_amount)}</p></div>
+              <div><p className="text-stone-600">COD Due</p><p className="font-medium">{formatPrice(order.cod_amount)}</p></div>
+              {order.razorpay_order_id && <div className="col-span-2"><p className="text-stone-600">Razorpay Order</p><p className="font-mono text-xs break-all">{order.razorpay_order_id}</p></div>}
+              {order.razorpay_payment_id && <div className="col-span-2"><p className="text-stone-600">Razorpay Payment</p><p className="font-mono text-xs break-all">{order.razorpay_payment_id}</p></div>}
             </div>
           </div>
+
+          {/* Custom Measurements */}
+          {order.order_measurements && (
+            <div className="rounded-sm border border-[#D4A843]/30 bg-[#D4A843]/5 p-5">
+              <h2 className="text-sm font-semibold text-stone-900 mb-3 flex items-center gap-2">
+                <Ruler className="h-4 w-4 text-[#95271D]" />
+                Custom Fit Measurements
+              </h2>
+              <div className="grid grid-cols-3 gap-4 text-sm">
+                <div>
+                  <p className="text-stone-600">Chest</p>
+                  <p className="font-medium">{order.order_measurements.chest} cm</p>
+                </div>
+                <div>
+                  <p className="text-stone-600">Waist</p>
+                  <p className="font-medium">{order.order_measurements.waist} cm</p>
+                </div>
+                <div>
+                  <p className="text-stone-600">Full Height</p>
+                  <p className="font-medium">{order.order_measurements.full_height} cm</p>
+                </div>
+              </div>
+              {order.order_measurements.personalisation_request && (
+                <div className="mt-3 rounded-sm bg-white p-3 border border-[#E5D5C5]/50">
+                  <p className="text-xs font-medium text-stone-600 mb-1">Personalisation Request</p>
+                  <p className="text-sm text-stone-900 italic">{order.order_measurements.personalisation_request}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Status History */}
+          {statusHistory.length > 0 && (
+            <div className="rounded-sm border border-stone-200 bg-white p-5">
+              <h2 className="text-sm font-semibold text-stone-900 mb-4 flex items-center gap-2">
+                <FileText className="h-4 w-4 text-stone-600" />
+                Status History
+              </h2>
+              <div className="space-y-3">
+                {statusHistory.map((entry) => (
+                  <div key={entry.id} className="flex items-start gap-3 text-sm">
+                    <div className="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-stone-400" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {entry.old_status && (
+                          <span className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium ${getOrderStatusColor(entry.old_status)}`}>
+                            {getOrderStatusLabel(entry.old_status)}
+                          </span>
+                        )}
+                        {entry.old_status && <span className="text-stone-400">→</span>}
+                        <span className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium ${getOrderStatusColor(entry.new_status)}`}>
+                          {getOrderStatusLabel(entry.new_status)}
+                        </span>
+                        {entry.changed_by && (
+                          <span className="text-xs text-stone-500">by {entry.changed_by}</span>
+                        )}
+                      </div>
+                      {entry.notes && <p className="mt-0.5 text-xs text-stone-500">{entry.notes}</p>}
+                      <p className="text-[10px] text-stone-400">{formatDate(entry.created_at)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Sidebar */}
@@ -91,20 +173,36 @@ export default async function AdminOrderDetailPage({ params }: Props) {
 
           {/* Status & Dates */}
           <div className="rounded-sm border border-stone-200 bg-white p-5">
-            <h2 className="text-sm font-semibold text-stone-900 mb-3">Order Status</h2>
+            <h2 className="text-sm font-semibold text-stone-900 mb-3">Status</h2>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-stone-600">Status</span>
+                <span className="text-stone-600">Order</span>
                 <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${getOrderStatusColor(order.order_status)}`}>{getOrderStatusLabel(order.order_status)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-stone-600">Payment</span>
+                <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${getPaymentStatusColor(order.payment_status)}`}>{order.payment_status}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-stone-600">Packaging</span>
+                <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                  order.packaging_status === "ready_for_pickup" ? "bg-green-100 text-green-800" :
+                  order.packaging_status === "packed" ? "bg-blue-100 text-blue-800" :
+                  "bg-stone-100 text-stone-800"
+                }`}>{order.packaging_status}</span>
               </div>
               <div className="flex justify-between"><span className="text-stone-600">Created</span><span>{formatDate(order.created_at)}</span></div>
               <div className="flex justify-between"><span className="text-stone-600">Updated</span><span>{formatDate(order.updated_at)}</span></div>
+              {order.shipped_at && <div className="flex justify-between"><span className="text-stone-600">Shipped</span><span>{formatDate(order.shipped_at)}</span></div>}
+              {order.delivered_at && <div className="flex justify-between"><span className="text-stone-600">Delivered</span><span>{formatDate(order.delivered_at)}</span></div>}
+              {order.tracking_id && <div><p className="text-stone-600">Tracking</p><p className="font-mono text-xs break-all">{order.tracking_id}</p></div>}
+              {order.shipping_provider && <div><p className="text-stone-600">Carrier</p><p className="text-xs">{order.shipping_provider}</p></div>}
             </div>
           </div>
 
           {order.notes && (
             <div className="rounded-sm border border-stone-200 bg-white p-5">
-              <h2 className="text-sm font-semibold text-stone-900 mb-2">Notes</h2>
+              <h2 className="text-sm font-semibold text-stone-900 mb-2">Customer Notes</h2>
               <p className="text-sm text-stone-600">{order.notes}</p>
             </div>
           )}

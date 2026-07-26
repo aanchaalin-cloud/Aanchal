@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, Package, ShoppingCart, LogOut } from "lucide-react";
+import { LayoutDashboard, Package, ShoppingCart, LogOut, Star, Gift, Box } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -10,6 +10,9 @@ const NAV_ITEMS = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { href: "/admin/products", label: "Products", icon: Package, exact: false },
   { href: "/admin/orders", label: "Orders", icon: ShoppingCart, exact: false },
+  { href: "/admin/packaging", label: "Packaging", icon: Box, exact: false },
+  { href: "/admin/reviews", label: "Reviews", icon: Star, exact: true },
+  { href: "/admin/rewards", label: "Rewards", icon: Gift, exact: true },
 ];
 
 export function AdminNav({ userEmail }: { userEmail: string }) {

@@ -11,6 +11,8 @@ import {
 import type { ProductWithDetails } from "@/types";
 import { useCart } from "@/context/CartContext";
 import { ProductCard } from "@/components/product/ProductCard";
+import { ProductReviews } from "@/components/product/ProductReviews";
+import { ReviewForm } from "@/components/product/ReviewForm";
 
 interface ProductDetailProps {
   product: ProductWithDetails;
@@ -427,6 +429,18 @@ export function ProductDetail({ product, relatedProducts = [] }: ProductDetailPr
           </div>
         </div>
       </div>
+
+      {/* Reviews */}
+      <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 border-t border-[#E5D5C5]/30">
+        <h2 className="text-2xl font-semibold text-[#1C1C1C] mb-8">Customer Reviews</h2>
+        <div className="grid grid-cols-1 gap-10 lg:grid-cols-2">
+          <ProductReviews productId={product.id} />
+          <div className="bg-white rounded-sm border border-[#E5D5C5]/50 p-6">
+            <h3 className="text-sm font-semibold uppercase tracking-widest text-[#1C1C1C] mb-4">Write a Review</h3>
+            <ReviewForm productId={product.id} productName={product.name} />
+          </div>
+        </div>
+      </section>
 
       {/* Related Products */}
       {relatedProducts.length > 0 && (

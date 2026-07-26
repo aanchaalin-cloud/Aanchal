@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { Messages } from "@/lib/messages";
@@ -50,7 +51,7 @@ export async function getActiveProductCatalog(): Promise<
   return { data: products.map(filterActiveVariants), error: null };
 }
 
-export async function getActiveProductBySlug(
+export const getActiveProductBySlug = cache(async function getActiveProductBySlug(
   slug: string
 ): Promise<ProductQueryResult<ProductWithDetails>> {
   if (!isSupabaseConfigured()) {
@@ -77,7 +78,7 @@ export async function getActiveProductBySlug(
   }
 
   return { data: filterActiveVariants(data as ProductWithDetails), error: null };
-}
+});
 
 /**
  * Fetch all active products for the public shop page.

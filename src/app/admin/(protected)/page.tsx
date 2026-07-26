@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Package, ShoppingCart, TrendingUp, AlertTriangle } from "lucide-react";
+import { Package, ShoppingCart, AlertTriangle, IndianRupee, Truck, Clock, CheckCircle } from "lucide-react";
 import { Messages } from "@/lib/messages";
 import { createClient } from "@/lib/supabase/server";
 
@@ -8,27 +8,33 @@ export const dynamic = "force-dynamic";
 export default async function AdminDashboardPage() {
   const supabase = await createClient();
 
-  // Fetch stats
   const [
-    { count: totalProducts },
-    { count: activeProducts },
     { count: totalOrders },
     { count: pendingOrders },
-    { count: paidOrders },
+    { count: inProductionOrders },
+    { count: readyToShipOrders },
+    { count: shippedOrders },
+    { count: deliveredOrders },
+    { count: lowStockCount },
   ] = await Promise.all([
-    supabase.from("products").select("*", { count: "exact", head: true }),
-    supabase.from("products").select("*", { count: "exact", head: true }).eq("is_active", true),
     supabase.from("orders").select("*", { count: "exact", head: true }),
     supabase.from("orders").select("*", { count: "exact", head: true }).eq("order_status", "pending"),
-    supabase.from("orders").select("*", { count: "exact", head: true }).eq("payment_status", "paid"),
+    supabase.from("orders").select("*", { count: "exact", head: true }).eq("order_status", "in_production"),
+    supabase.from("orders").select("*", { count: "exact", head: true }).eq("order_status", "ready_to_ship"),
+    supabase.from("orders").select("*", { count: "exact", head: true }).eq("order_status", "shipped"),
+    supabase.from("orders").select("*", { count: "exact", head: true }).eq("order_status", "delivered"),
+    supabase.from("product_variants").select("*", { count: "exact", head: true }).lt("stock", 5).gt("stock", 0),
   ]);
 
-  // Recent orders
-  const { data: recentOrders } = await supabase
+  // Revenue stats
+  const { data: revenueData } = await supabase
     .from("orders")
-    .select("id, customer_name, total_amount, order_status, payment_status, created_at")
-    .order("created_at", { ascending: false })
-    .limit(5);
+    .select("total_amount, prepaid_amount, cod_amount, payment_status")
+    .in("payment_status", ["paid", "partially_paid"]);
+
+  const totalRevenue = revenueData?.reduce((sum, o) => sum + (o.total_amount ?? 0), 0) ?? 0;
+  const totalPrepaid = revenueData?.reduce((sum, o) => sum + (o.prepaid_amount ?? 0), 0) ?? 0;
+  const totalCODPending = revenueData?.reduce((sum, o) => sum + (o.cod_amount ?? 0), 0) ?? 0;
 
   // Low stock variants
   const { data: lowStockVariants } = await supabase
@@ -38,11 +44,34 @@ export default async function AdminDashboardPage() {
     .gt("stock", 0)
     .limit(5);
 
+  // Recent orders
+  const { data: recentOrders } = await supabase
+    .from("orders")
+    .select("id, customer_name, total_amount, order_status, payment_status, created_at")
+    .order("created_at", { ascending: false })
+    .limit(5);
+
+  // Pending reviews
+  const { count: pendingReviews } = await supabase
+    .from("reviews")
+    .select("*", { count: "exact", head: true })
+    .eq("is_approved", false);
+
+  // Pending rewards
+  const { count: pendingRewards } = await supabase
+    .from("reward_submissions")
+    .select("*", { count: "exact", head: true })
+    .eq("status", "pending");
+
   const stats = [
-    { label: "Total Products", value: totalProducts ?? 0, sub: `${activeProducts ?? 0} active`, icon: Package, href: "/admin/products" },
+    { label: "Total Revenue", value: `₹${totalRevenue.toLocaleString("en-IN")}`, sub: `₹${totalPrepaid.toLocaleString("en-IN")} prepaid`, icon: IndianRupee, href: "/admin/orders" },
+    { label: "Pending COD", value: `₹${totalCODPending.toLocaleString("en-IN")}`, sub: "Due on delivery", icon: Clock, href: "/admin/orders" },
     { label: "Total Orders", value: totalOrders ?? 0, sub: `${pendingOrders ?? 0} pending`, icon: ShoppingCart, href: "/admin/orders" },
-    { label: "Paid Orders", value: paidOrders ?? 0, sub: "Successfully paid", icon: TrendingUp, href: "/admin/orders" },
-    { label: "Low Stock", value: lowStockVariants?.length ?? 0, sub: "Variants below 5", icon: AlertTriangle, href: "/admin/products" },
+    { label: "In Production", value: inProductionOrders ?? 0, sub: "Being crafted", icon: Package, href: "/admin/orders" },
+    { label: "Ready to Ship", value: readyToShipOrders ?? 0, sub: "Awaiting pickup", icon: Truck, href: "/admin/orders" },
+    { label: "Shipped", value: shippedOrders ?? 0, sub: "In transit", icon: Truck, href: "/admin/orders" },
+    { label: "Delivered", value: deliveredOrders ?? 0, sub: "Completed", icon: CheckCircle, href: "/admin/orders" },
+    { label: "Low Stock", value: lowStockCount ?? 0, sub: "Variants below 5", icon: AlertTriangle, href: "/admin/products" },
   ];
 
   return (
@@ -52,7 +81,7 @@ export default async function AdminDashboardPage() {
         <p className="text-sm text-stone-600 mt-1">Overview of your store</p>
       </div>
 
-      {/* Stats */}
+      {/* Stats Grid */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {stats.map((stat) => (
           <Link
@@ -69,6 +98,22 @@ export default async function AdminDashboardPage() {
           </Link>
         ))}
       </div>
+
+      {/* Pending Actions */}
+      {(pendingReviews ?? 0) > 0 || (pendingRewards ?? 0) > 0 ? (
+        <div className="flex flex-wrap gap-3">
+          {(pendingReviews ?? 0) > 0 && (
+            <Link href="/admin/reviews" className="inline-flex items-center gap-2 rounded border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100 transition-colors">
+              {pendingReviews} Pending Review{pendingReviews !== 1 ? "s" : ""}
+            </Link>
+          )}
+          {(pendingRewards ?? 0) > 0 && (
+            <Link href="/admin/rewards" className="inline-flex items-center gap-2 rounded border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100 transition-colors">
+              {pendingRewards} Pending Reward{pendingRewards !== 1 ? "s" : ""}
+            </Link>
+          )}
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Recent Orders */}
@@ -158,6 +203,18 @@ export default async function AdminDashboardPage() {
         >
           <ShoppingCart className="h-4 w-4" />
           View All Orders
+        </Link>
+        <Link
+          href="/admin/reviews"
+          className="inline-flex items-center gap-2 rounded border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50 transition-colors"
+        >
+          Reviews
+        </Link>
+        <Link
+          href="/admin/rewards"
+          className="inline-flex items-center gap-2 rounded border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50 transition-colors"
+        >
+          Rewards
         </Link>
         <Link
           href="/"
