@@ -19,7 +19,7 @@ export default function ContactPage() {
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#800020]">
           About
         </p>
-        <h1 className="mt-2 font-serif text-4xl font-semibold text-[#1C1C1C]">
+        <h1 className="mt-2 text-4xl font-semibold text-[#1C1C1C]">
           About Aanchal
         </h1>
         <div className="mt-6 space-y-4 text-sm leading-relaxed text-[#6B6B6B] max-w-2xl">
@@ -44,7 +44,7 @@ export default function ContactPage() {
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#800020]">
           Get in Touch
         </p>
-        <h2 className="mt-2 font-serif text-3xl font-semibold text-[#1C1C1C]">
+        <h2 className="mt-2 text-3xl font-semibold text-[#1C1C1C]">
           Contact Us
         </h2>
         <p className="mt-3 text-sm text-[#6B6B6B] max-w-lg">

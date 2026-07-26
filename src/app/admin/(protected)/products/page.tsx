@@ -14,7 +14,7 @@ export default async function AdminProductsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-serif text-2xl font-semibold text-stone-900">Products</h1>
+          <h1 className="text-2xl font-semibold text-stone-900">Products</h1>
           <p className="text-sm text-stone-600 mt-1">{products.length} total products</p>
         </div>
         <Link

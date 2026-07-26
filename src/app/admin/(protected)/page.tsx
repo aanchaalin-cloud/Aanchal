@@ -48,7 +48,7 @@ export default async function AdminDashboardPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="font-serif text-2xl font-semibold text-stone-900">Dashboard</h1>
+        <h1 className="text-2xl font-semibold text-stone-900">Dashboard</h1>
         <p className="text-sm text-stone-600 mt-1">Overview of your store</p>
       </div>
 

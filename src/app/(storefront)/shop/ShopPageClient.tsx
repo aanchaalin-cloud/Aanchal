@@ -207,7 +207,7 @@ export function ShopPageClient({ products }: Props) {
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#800020]">
           Collection
         </p>
-        <h1 className="mt-1 font-serif text-3xl font-semibold text-[#1C1C1C]">
+        <h1 className="mt-1 text-3xl font-semibold text-[#1C1C1C]">
           All Products
         </h1>
         <p className="mt-2 text-sm text-[#6B6B6B]">
@@ -254,7 +254,7 @@ export function ShopPageClient({ products }: Props) {
         {showFilters && (
           <div className="fixed inset-y-0 left-0 z-50 w-80 max-w-[85vw] overflow-y-auto bg-white p-6 shadow-xl lg:hidden">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="font-serif text-lg font-semibold text-[#1C1C1C]">Filters</h2>
+              <h2 className="text-lg font-semibold text-[#1C1C1C]">Filters</h2>
               <button
                 type="button"
                 onClick={() => setShowFilters(false)}

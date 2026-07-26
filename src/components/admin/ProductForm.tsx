@@ -308,7 +308,7 @@ export function ProductForm({ product, mode }: Props) {
 
       {/* Basic Info */}
       <section className="space-y-4 rounded-sm border border-stone-200 bg-white p-6">
-        <h2 className="font-serif text-lg font-semibold text-stone-900">Basic Information</h2>
+        <h2 className="text-lg font-semibold text-stone-900">Basic Information</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className="block text-xs font-medium text-stone-700 mb-1">Product Name *</label>
@@ -331,7 +331,7 @@ export function ProductForm({ product, mode }: Props) {
 
       {/* Pricing */}
       <section className="space-y-4 rounded-sm border border-stone-200 bg-white p-6">
-        <h2 className="font-serif text-lg font-semibold text-stone-900">Pricing</h2>
+        <h2 className="text-lg font-semibold text-stone-900">Pricing</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className="block text-xs font-medium text-stone-700 mb-1">Price (₹) *</label>
@@ -346,7 +346,7 @@ export function ProductForm({ product, mode }: Props) {
 
       {/* Details */}
       <section className="space-y-4 rounded-sm border border-stone-200 bg-white p-6">
-        <h2 className="font-serif text-lg font-semibold text-stone-900">Product Details</h2>
+        <h2 className="text-lg font-semibold text-stone-900">Product Details</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className="block text-xs font-medium text-stone-700 mb-1">Fabric</label>
@@ -370,7 +370,7 @@ export function ProductForm({ product, mode }: Props) {
       {/* Images */}
       <section className="space-y-4 rounded-sm border border-stone-200 bg-white p-6">
         <div className="flex items-center justify-between">
-          <h2 className="font-serif text-lg font-semibold text-stone-900">Images</h2>
+          <h2 className="text-lg font-semibold text-stone-900">Images</h2>
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
@@ -460,7 +460,7 @@ export function ProductForm({ product, mode }: Props) {
       {/* Variants */}
       <section className="space-y-4 rounded-sm border border-stone-200 bg-white p-6">
         <div className="flex items-center justify-between">
-          <h2 className="font-serif text-lg font-semibold text-stone-900">Variants (Size/Color/Stock)</h2>
+          <h2 className="text-lg font-semibold text-stone-900">Variants (Size/Color/Stock)</h2>
           <button type="button" onClick={addVariant} className="text-sm text-stone-600 hover:text-stone-900">+ Add Variant</button>
         </div>
         <div className="space-y-3">

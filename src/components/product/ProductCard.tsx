@@ -79,7 +79,7 @@ export function ProductCard({ product }: ProductCardProps) {
               {category}
             </p>
           )}
-          <h3 className="mt-1 font-serif text-lg font-medium leading-tight text-[#1C1C1C] group-hover:text-[#800020] transition-colors">
+          <h3 className="mt-1 text-lg font-medium leading-tight text-[#1C1C1C] group-hover:text-[#800020] transition-colors">
             {product.name}
           </h3>
           {uniqueSizes.length > 0 && (

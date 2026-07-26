@@ -17,15 +17,15 @@ export default function PrivacyPolicyPage() {
       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#800020]">
         Policies
       </p>
-      <h1 className="mt-2 font-serif text-4xl font-semibold text-[#1C1C1C] mb-8">Privacy Policy</h1>
+      <h1 className="mt-2 text-4xl font-semibold text-[#1C1C1C] mb-8">Privacy Policy</h1>
       <div className="space-y-6 text-sm leading-relaxed text-[#6B6B6B]">
         <p>Last updated: January 2025</p>
         <p>This Privacy Policy describes how Aanchal collects, uses, and protects your personal information when you visit or make a purchase from our website.</p>
 
-        <h2 className="font-serif text-xl font-semibold text-[#1C1C1C]">Information We Collect</h2>
+        <h2 className="text-xl font-semibold text-[#1C1C1C]">Information We Collect</h2>
         <p>We collect information you provide directly to us, such as your name, email address, phone number, shipping address, and payment details when you place an order. Payment details are processed securely through Razorpay and are never stored on our servers.</p>
 
-        <h2 className="font-serif text-xl font-semibold text-[#1C1C1C]">How We Use Your Information</h2>
+        <h2 className="text-xl font-semibold text-[#1C1C1C]">How We Use Your Information</h2>
         <ul className="list-disc list-inside space-y-1">
           <li>To process and fulfil your orders</li>
           <li>To communicate with you about your order</li>
@@ -33,13 +33,13 @@ export default function PrivacyPolicyPage() {
           <li>To send occasional promotional emails (only with your consent)</li>
         </ul>
 
-        <h2 className="font-serif text-xl font-semibold text-[#1C1C1C]">Data Protection</h2>
+        <h2 className="text-xl font-semibold text-[#1C1C1C]">Data Protection</h2>
         <p>We implement a variety of security measures to maintain the safety of your personal information. Your data is stored in secure databases and accessed only by authorized personnel.</p>
 
-        <h2 className="font-serif text-xl font-semibold text-[#1C1C1C]">Third-Party Services</h2>
+        <h2 className="text-xl font-semibold text-[#1C1C1C]">Third-Party Services</h2>
         <p>We use Razorpay for payment processing and Supabase for database hosting. These third parties have their own privacy policies governing the use of your data.</p>
 
-        <h2 className="font-serif text-xl font-semibold text-[#1C1C1C]">Contact</h2>
+        <h2 className="text-xl font-semibold text-[#1C1C1C]">Contact</h2>
         <p>For questions about this privacy policy, please contact us at hello@aanchal.in.</p>
       </div>
     </div>

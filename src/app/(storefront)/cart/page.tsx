@@ -24,7 +24,7 @@ export default function CartPage() {
     return (
       <div className="mx-auto max-w-3xl px-4 py-24 text-center sm:px-6">
         <ShoppingBag className="mx-auto h-16 w-16 text-[#95271D]" />
-        <h1 className="mt-4 font-serif text-2xl font-semibold text-[#1C1C1C]">
+        <h1 className="mt-4 text-2xl font-semibold text-[#1C1C1C]">
           Your cart is empty
         </h1>
         <p className="mt-2 text-sm text-[#6B6B6B]">
@@ -44,7 +44,7 @@ export default function CartPage() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8">
-      <h1 className="mb-8 font-serif text-3xl font-semibold text-[#1C1C1C]">
+      <h1 className="mb-8 text-3xl font-semibold text-[#1C1C1C]">
         Your Cart
       </h1>
 
@@ -167,7 +167,7 @@ export default function CartPage() {
 
         <div className="lg:col-span-1">
           <div className="rounded-sm border border-[#E5D5C5]/50 bg-white p-6 sticky top-24">
-            <h2 className="font-serif text-lg font-semibold text-[#1C1C1C]">
+            <h2 className="text-lg font-semibold text-[#1C1C1C]">
               Order Summary
             </h2>
 

@@ -55,7 +55,7 @@ export function HeroSection() {
             <p className="text-sm font-semibold uppercase tracking-[0.25em] text-white/80">
               Indian Craftsmanship, Modern Silhouettes
             </p>
-            <h1 className="mt-4 font-serif text-6xl font-bold leading-tight text-white sm:text-7xl lg:text-8xl">
+            <h1 className="mt-4 text-6xl font-bold leading-tight text-white sm:text-7xl lg:text-8xl">
               AANCHAL
             </h1>
             <p className="mt-4 text-lg text-white/80 font-light tracking-wide">

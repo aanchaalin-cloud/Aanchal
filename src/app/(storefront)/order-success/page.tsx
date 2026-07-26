@@ -69,7 +69,7 @@ export default async function OrderSuccessPage({ searchParams }: Props) {
     <div className="mx-auto max-w-2xl px-4 py-24 text-center sm:px-6">
       <StatusIcon className={`mx-auto h-16 w-16 ${iconColor}`} />
 
-      <h1 className="mt-6 font-serif text-3xl font-semibold text-[#1C1C1C]">
+      <h1 className="mt-6 text-3xl font-semibold text-[#1C1C1C]">
         {title}
       </h1>
       <p className="mt-4 text-base text-[#6B6B6B]">

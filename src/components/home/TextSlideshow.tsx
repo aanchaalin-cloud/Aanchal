@@ -57,7 +57,7 @@ export function TextSlideshow() {
               <p className="mt-6 text-xs font-semibold uppercase tracking-[0.2em] text-[#D4A843]">
                 {slide.subtitle}
               </p>
-              <h2 className="mt-3 font-serif text-3xl font-semibold text-[#1C1C1C] sm:text-4xl">
+              <h2 className="mt-3 text-3xl font-semibold text-[#1C1C1C] sm:text-4xl">
                 {slide.title}
               </h2>
               <p className="mx-auto mt-4 max-w-lg text-sm leading-relaxed text-[#6B6B6B]">

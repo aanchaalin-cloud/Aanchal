@@ -66,7 +66,7 @@ export default function AdminLoginPage() {
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <h1 className="font-serif text-3xl font-semibold text-[#1C1C1C]">
+          <h1 className="text-3xl font-semibold text-[#1C1C1C]">
             Aanchal Admin
           </h1>
           <p className="mt-2 text-sm text-[#6B6B6B]">

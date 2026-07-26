@@ -18,7 +18,7 @@ export default async function AdminOrderDetailPage({ params }: Props) {
       <div className="flex items-center justify-between">
         <div>
           <Link href="/admin/orders" className="text-sm text-stone-600 hover:text-stone-900">← Back to Orders</Link>
-          <h1 className="mt-1 font-serif text-2xl font-semibold text-stone-900">Order {order.id.slice(0, 8)}…</h1>
+          <h1 className="mt-1 text-2xl font-semibold text-stone-900">Order {order.id.slice(0, 8)}…</h1>
         </div>
         <OrderStatusUpdater orderId={order.id} currentStatus={order.order_status} />
       </div>

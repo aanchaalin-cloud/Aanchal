@@ -9,7 +9,7 @@ export function BannerSection() {
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#D4A843]/80">
               Crafted with Love
             </p>
-            <h2 className="mt-4 font-serif text-4xl font-bold leading-tight text-[#D4A843] sm:text-5xl">
+            <h2 className="mt-4 text-4xl font-bold leading-tight text-[#D4A843] sm:text-5xl">
               Where Every Thread Tells a Story
             </h2>
             <p className="mt-4 max-w-md text-sm leading-relaxed text-[#D4A843]/70">

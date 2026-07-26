@@ -222,7 +222,7 @@ export default function CheckoutPage() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8">
-      <h1 className="mb-8 font-serif text-3xl font-semibold text-[#1C1C1C]">
+      <h1 className="mb-8 text-3xl font-semibold text-[#1C1C1C]">
         Checkout
       </h1>
 
@@ -355,7 +355,7 @@ export default function CheckoutPage() {
 
           <div className="lg:col-span-1">
             <div className="rounded-sm border border-[#E5D5C5]/50 bg-white p-5 sticky top-24">
-              <h2 className="font-serif text-lg font-semibold text-[#1C1C1C] mb-4">
+              <h2 className="text-lg font-semibold text-[#1C1C1C] mb-4">
                 Order Summary
               </h2>
 

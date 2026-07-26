@@ -23,7 +23,7 @@ export default function GlobalError({
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#800020]/5">
             <AlertTriangle className="h-8 w-8 text-[#800020]" />
           </div>
-          <h1 className="mt-6 font-serif text-3xl font-semibold text-[#1C1C1C]">
+          <h1 className="mt-6 text-3xl font-semibold text-[#1C1C1C]">
             Something went wrong
           </h1>
           <p className="mt-2 max-w-md text-center text-sm text-[#6B6B6B]">

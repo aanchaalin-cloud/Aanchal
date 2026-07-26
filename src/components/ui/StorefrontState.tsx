@@ -13,7 +13,7 @@ export function StorefrontErrorState({
       <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#800020]/5">
         <AlertCircle className="h-8 w-8 text-[#800020]" />
       </div>
-      <h1 className="mt-6 font-serif text-2xl font-semibold text-[#1C1C1C]">
+      <h1 className="mt-6 text-2xl font-semibold text-[#1C1C1C]">
         {title}
       </h1>
       <p className="mt-2 text-sm text-[#6B6B6B]">{message}</p>
@@ -52,7 +52,7 @@ export function StorefrontEmptyState({
   return (
     <div className="mx-auto max-w-lg px-4 py-24 text-center sm:px-6">
       <Icon className="mx-auto h-16 w-16 text-[#95271D]" />
-      <h2 className="mt-4 font-serif text-xl font-semibold text-[#1C1C1C]">
+      <h2 className="mt-4 text-xl font-semibold text-[#1C1C1C]">
         {title}
       </h2>
       <p className="mt-2 text-sm text-[#6B6B6B]">{message}</p>

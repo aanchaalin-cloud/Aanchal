@@ -53,7 +53,7 @@ export function ReviewsSection() {
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#800020]">
             Testimonials
           </p>
-          <h2 className="mt-2 font-serif text-3xl font-semibold text-[#1C1C1C]">
+          <h2 className="mt-2 text-3xl font-semibold text-[#1C1C1C]">
             What Our Customers Say
           </h2>
         </div>

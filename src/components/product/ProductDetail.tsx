@@ -182,7 +182,7 @@ export function ProductDetail({ product, relatedProducts = [] }: ProductDetailPr
               </p>
             )}
 
-            <h1 className="mt-2 font-serif text-2xl font-semibold leading-tight text-[#1C1C1C] sm:text-3xl">
+            <h1 className="mt-2 text-2xl font-semibold leading-tight text-[#1C1C1C] sm:text-3xl">
               {product.name}
             </h1>
 
@@ -431,7 +431,7 @@ export function ProductDetail({ product, relatedProducts = [] }: ProductDetailPr
       {/* Related Products */}
       {relatedProducts.length > 0 && (
         <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 border-t border-[#E5D5C5]/30">
-          <h2 className="font-serif text-2xl font-semibold text-[#1C1C1C] mb-8">
+          <h2 className="text-2xl font-semibold text-[#1C1C1C] mb-8">
             You May Also Like
           </h2>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
@@ -456,7 +456,7 @@ export function ProductDetail({ product, relatedProducts = [] }: ProductDetailPr
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-serif text-lg font-semibold text-[#1C1C1C]">Size Guide</h3>
+              <h3 className="text-lg font-semibold text-[#1C1C1C]">Size Guide</h3>
               <button
                 type="button"
                 onClick={() => setShowSizeGuide(false)}
