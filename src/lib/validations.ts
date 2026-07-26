@@ -57,15 +57,6 @@ export const couponSchema = z
       return true;
     },
     { message: "Percentage discount cannot exceed 100%" }
-  )
-  .refine(
-    (data) => {
-      if (data.max_discount_amount != null && data.discount_type === "percentage") {
-        return true; // max discount only makes sense for percentage
-      }
-      return true;
-    },
-    { message: "" }
   );
 
 export type CouponInput = z.infer<typeof couponSchema>;

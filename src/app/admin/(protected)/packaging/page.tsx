@@ -37,7 +37,6 @@ export default async function PackagingPage() {
     .from("orders")
     .select(`
       id,
-      order_number,
       customer_name,
       order_status,
       packaging_status,
@@ -45,7 +44,10 @@ export default async function PackagingPage() {
       cod_amount,
       prepaid_amount,
       created_at,
-      shipping_address
+      address_line1,
+      city,
+      state,
+      pincode
     `)
     .in("order_status", ["confirmed", "in_production", "quality_check", "ready_to_ship", "shipped"])
     .order("created_at", { ascending: false });
@@ -137,7 +139,7 @@ export default async function PackagingPage() {
                     <tr key={order.id} className="hover:bg-stone-50 transition-colors">
                       <td className="px-4 py-3">
                         <span className="font-medium text-stone-900">
-                          #{order.order_number ?? order.id.slice(0, 8)}
+                          #{order.id.slice(0, 8)}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-stone-700">{order.customer_name}</td>

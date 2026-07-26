@@ -1,6 +1,8 @@
 -- =============================================================
--- Aanchal E-Commerce — Full Database Schema
--- Run this in Supabase SQL Editor (Dashboard → SQL Editor)
+-- ⚠️ DEPRECATED — DO NOT USE
+-- This file is STALE and superseded by migrations in supabase/migrations/.
+-- It contains outdated column types and missing tables.
+-- Use migrations for all database changes.
 -- =============================================================
 
 -- 0. Extensions

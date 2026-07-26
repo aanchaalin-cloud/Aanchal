@@ -495,7 +495,7 @@ export default function CheckoutPage() {
                     {paymentMethod === "prepaid" && displaySubtotal > 0 && (
                       <div className="flex justify-between text-green-600">
                         <span>Prepaid discount (5%)</span>
-                        <span>-{formatPrice(Math.round(displaySubtotal * 0.05))}</span>
+                        <span>-{formatPrice(Math.round(totalAmount * 0.05))}</span>
                       </div>
                     )}
                     <div className="border-t border-[#E5D5C5]/50 pt-2 flex justify-between font-semibold text-[#1C1C1C]">
