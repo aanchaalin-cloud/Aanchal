@@ -2,7 +2,7 @@ import { Header } from "./Header";
 import { Footer } from "./Footer";
 import { BackgroundGraphics } from "./BackgroundGraphics";
 import { CartDrawer } from "@/components/cart/CartDrawer";
-import { FloatingVideo } from "@/components/ui/FloatingVideo";
+import { LazyFloatingVideo } from "@/components/ui/LazyFloatingVideo";
 
 export function StorefrontLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -12,7 +12,7 @@ export function StorefrontLayout({ children }: { children: React.ReactNode }) {
       <main className="min-h-screen pt-16">{children}</main>
       <Footer />
       <CartDrawer />
-      <FloatingVideo />
+      <LazyFloatingVideo />
     </>
   );
 }

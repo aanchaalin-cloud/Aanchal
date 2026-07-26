@@ -96,56 +96,50 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ status: "already_processed" });
     }
 
-    // 6. Decrement stock atomically
+    // 6. Decrement stock atomically (parallelized)
     const orderItems = order.order_items as Array<{
       variant_id: string | null;
       quantity: number;
     }>;
 
-    const decrementedVariants: string[] = [];
-    let stockFailed = false;
-    let stockErrorMsg = "";
+    const stockItems = orderItems.filter((item) => item.variant_id);
 
-    for (const item of orderItems) {
-      if (!item.variant_id) continue;
+    const stockResults = await Promise.all(
+      stockItems.map(async (item) => {
+        const { data: rpcResult, error: rpcError } = await supabase.rpc(
+          "decrement_variant_stock",
+          { p_variant_id: item.variant_id!, p_quantity: item.quantity }
+        );
+        const result = Array.isArray(rpcResult) && rpcResult.length > 0
+          ? (rpcResult[0] as { success: boolean; message: string })
+          : null;
+        return {
+          variantId: item.variant_id!,
+          quantity: item.quantity,
+          success: result?.success ?? false,
+          error: rpcError?.message ?? result?.message ?? "Stock update failed",
+        };
+      })
+    );
 
-      const { data: rpcResult, error: rpcError } = await supabase.rpc(
-        "decrement_variant_stock",
-        {
-          p_variant_id: item.variant_id,
-          p_quantity: item.quantity,
-        }
-      );
-
-      const result = Array.isArray(rpcResult) && rpcResult.length > 0
-        ? (rpcResult[0] as { success: boolean; message: string })
-        : null;
-
-      if (rpcError || !result?.success) {
-        stockFailed = true;
-        stockErrorMsg = result?.message ?? rpcError?.message ?? "Stock update failed";
-        break;
-      }
-
-      decrementedVariants.push(item.variant_id);
-    }
+    const failedStock = stockResults.filter((r) => !r.success);
 
     // 7. Roll back on failure
-    if (stockFailed) {
-      for (const vid of decrementedVariants) {
-        const item = orderItems.find((i) => i.variant_id === vid);
-        if (item) {
+    if (failedStock.length > 0) {
+      const succeeded = stockResults.filter((r) => r.success);
+      await Promise.all(
+        succeeded.map(async (r) => {
           await supabase.rpc("increment_variant_stock", {
-            p_variant_id: vid,
-            p_quantity: item.quantity,
+            p_variant_id: r.variantId,
+            p_quantity: r.quantity,
           });
-        }
-      }
+        })
+      );
 
       console.error(
         "[webhook] Stock decrement failed for order %s: %s",
         order.id,
-        stockErrorMsg
+        failedStock.map((f) => f.error).join(", ")
       );
 
       return NextResponse.json(

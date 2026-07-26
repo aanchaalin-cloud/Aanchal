@@ -67,31 +67,29 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const orderItems = order.order_items as Array<{ variant_id: string | null; quantity: number }>;
-  const decrementedVariants: string[] = [];
-  let stockDecrementFailed = false;
+  const stockItems = orderItems.filter((item) => item.variant_id);
 
-  for (const item of orderItems) {
-    if (!item.variant_id) continue;
-    const { data: rpcResult } = await supabase.rpc("decrement_variant_stock", {
-      p_variant_id: item.variant_id, p_quantity: item.quantity,
-    });
-    const result = Array.isArray(rpcResult) && rpcResult.length > 0
-      ? (rpcResult[0] as { success: boolean; message: string })
-      : null;
-    if (!result?.success) {
-      stockDecrementFailed = true;
-      break;
-    }
-    decrementedVariants.push(item.variant_id);
-  }
+  const stockResults = await Promise.all(
+    stockItems.map(async (item) => {
+      const { data: rpcResult } = await supabase.rpc("decrement_variant_stock", {
+        p_variant_id: item.variant_id!, p_quantity: item.quantity,
+      });
+      const result = Array.isArray(rpcResult) && rpcResult.length > 0
+        ? (rpcResult[0] as { success: boolean; message: string })
+        : null;
+      return { variantId: item.variant_id!, success: result?.success ?? false };
+    })
+  );
 
-  if (stockDecrementFailed) {
-    for (const vid of decrementedVariants) {
-      const item = orderItems.find((i) => i.variant_id === vid);
-      if (item) {
-        await supabase.rpc("increment_variant_stock", { p_variant_id: vid, p_quantity: item.quantity });
-      }
-    }
+  const failedStock = stockResults.filter((r) => !r.success);
+  if (failedStock.length > 0) {
+    const succeeded = stockResults.filter((r) => r.success);
+    await Promise.all(
+      succeeded.map(async (r) => {
+        const item = stockItems.find((i) => i.variant_id === r.variantId);
+        if (item) await supabase.rpc("increment_variant_stock", { p_variant_id: r.variantId, p_quantity: item.quantity });
+      })
+    );
     return NextResponse.json({ success: false, error: "Insufficient stock", code: "INSUFFICIENT_STOCK" }, { status: 409 });
   }
 

@@ -134,41 +134,6 @@ export async function getFeaturedProducts(): Promise<ProductWithDetails[]> {
 }
 
 /**
- * Fetch a single active product by slug with images and variants.
- * Used for the product detail page.
- */
-export async function getProductBySlug(
-  slug: string
-): Promise<ProductWithDetails | null> {
-  if (!isSupabaseConfigured()) return null;
-
-  const supabase = await createClient();
-
-  const { data, error } = await supabase
-    .from("products")
-    .select(
-      `
-      *,
-      product_images ( id, url, alt_text, position ),
-      product_variants ( id, size, color, color_hex, sku, stock, is_active )
-    `
-    )
-    .eq("slug", slug)
-    .eq("is_active", true)
-    .single();
-
-  if (error) {
-    if (error.code !== "PGRST116") {
-      // PGRST116 = no rows returned — not a real error
-      console.warn("[getProductBySlug]", error.message);
-    }
-    return null;
-  }
-
-  return filterActiveVariants(data as ProductWithDetails);
-}
-
-/**
  * Fetch all products (active + inactive) for admin.
  * Uses server client with admin session — RLS allows admin to read all.
  */

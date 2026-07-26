@@ -54,18 +54,35 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     await serviceClient.from("product_variants").insert(addPayload);
   }
 
-  for (const v of toUpdate) {
-    await serviceClient.from("product_variants").update({
-      size: v.size || null, color: v.color || null, color_hex: v.color_hex || null, sku: v.sku || null, stock: v.stock,
-    }).eq("id", v.id);
+  if (toUpdate.length > 0) {
+    await Promise.all(
+      toUpdate.map((v) =>
+        serviceClient.from("product_variants").update({
+          size: v.size || null, color: v.color || null, color_hex: v.color_hex || null, sku: v.sku || null, stock: v.stock,
+        }).eq("id", v.id)
+      )
+    );
   }
 
-  for (const variantId of toRemove) {
-    const { count: refCount } = await serviceClient.from("order_items").select("id", { count: "exact", head: true }).eq("variant_id", variantId);
-    if (refCount && refCount > 0) {
-      await serviceClient.from("product_variants").update({ is_active: false, stock: 0 }).eq("id", variantId);
-    } else {
-      await serviceClient.from("product_variants").delete().eq("id", variantId);
+  if (toRemove.length > 0) {
+    const { data: refData } = await serviceClient
+      .from("order_items")
+      .select("variant_id")
+      .in("variant_id", toRemove);
+
+    const referencedIds = new Set((refData ?? []).map((r: { variant_id: string }) => r.variant_id));
+    const unreferencedIds = toRemove.filter((id: string) => !referencedIds.has(id));
+    const referencedToRemove = toRemove.filter((id: string) => referencedIds.has(id));
+
+    if (unreferencedIds.length > 0) {
+      await serviceClient.from("product_variants").delete().in("id", unreferencedIds);
+    }
+    if (referencedToRemove.length > 0) {
+      await Promise.all(
+        referencedToRemove.map((id: string) =>
+          serviceClient.from("product_variants").update({ is_active: false, stock: 0 }).eq("id", id)
+        )
+      );
     }
   }
 

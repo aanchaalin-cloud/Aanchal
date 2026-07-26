@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import {
-  getProductBySlug,
   getActiveProducts,
   getActiveProductBySlug,
   getRelatedProducts,
 } from "@/lib/queries/products";
+import type { ProductWithDetails } from "@/types";
 import { ProductDetail } from "@/components/product/ProductDetail";
 import { StorefrontErrorState } from "@/components/ui/StorefrontState";
 import { Messages } from "@/lib/messages";
@@ -16,7 +16,8 @@ type Props = {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const product = await getProductBySlug(slug);
+  const result = await getActiveProductBySlug(slug);
+  const product = result.data;
 
   if (!product) {
     return { title: "Product Not Found" };
@@ -45,7 +46,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-function jsonLd(product: NonNullable<Awaited<ReturnType<typeof getProductBySlug>>>) {
+function jsonLd(product: ProductWithDetails) {
   const siteUrl = process.env.NEXT_PUBLIC_BASE_URL ?? "https://aanchal.in";
   const displayPrice = product.discount_price ?? product.price;
   const image = product.product_images?.[0]?.url;
