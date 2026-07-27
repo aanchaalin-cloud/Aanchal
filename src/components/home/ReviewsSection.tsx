@@ -28,6 +28,42 @@ const REVIEWS = [
     rating: 5,
     text: "Aanchal has become my go-to for ethnic wear. The attention to detail, the quality of fabric, and the customer service are all outstanding.",
   },
+  {
+    name: "Deepa R.",
+    location: "Chennai",
+    rating: 5,
+    text: "The custom fit option is a game changer. I finally have a lehenga that fits perfectly without alterations. The personalisation request was handled beautifully.",
+  },
+  {
+    name: "Kavitha N.",
+    location: "Hyderabad",
+    rating: 5,
+    text: "Bought the Anarkali set for my sister's engagement. Everyone thought it was designer! The gold thread work is exquisite and the fabric drapes like a dream.",
+  },
+  {
+    name: "Shreya P.",
+    location: "Kolkata",
+    rating: 5,
+    text: "I was nervous ordering online but the measurements form was so easy to follow. The dress fits like it was made for me — because it literally was! Will order again.",
+  },
+  {
+    name: "Nandini V.",
+    location: "Jaipur",
+    rating: 5,
+    text: "The Bandhani print kurta is stunning. Rich colours, comfortable cotton, and the handloom feel is authentic. Aanchal truly honours Indian textile traditions.",
+  },
+  {
+    name: "Fatima Z.",
+    location: "Lucknow",
+    rating: 5,
+    text: "Beautiful chikankari work on the white kurta set. I wore it to an Eid gathering and received endless compliments. The packaging was lovely too — felt like unwrapping a gift.",
+  },
+  {
+    name: "Lakshmi T.",
+    location: "Coimbatore",
+    rating: 5,
+    text: "Third order from Aanchal and they never disappoint. The consistency in quality is what keeps me coming back. My mother loves their cotton sarees.",
+  },
 ];
 
 function getInitial(name: string) {
