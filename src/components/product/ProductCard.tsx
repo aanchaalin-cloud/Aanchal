@@ -54,7 +54,7 @@ export function ProductCard({ product }: ProductCardProps) {
           alt={product.name}
           fill
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-          className="object-cover group-hover:scale-105 transition-transform duration-700"
+          className="object-cover pointer-fine:group-hover:scale-105 transition-transform duration-700"
         />
         {hoverImage && (
           <Image
@@ -62,7 +62,7 @@ export function ProductCard({ product }: ProductCardProps) {
             alt={`${product.name} alternate view`}
             fill
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-            className="object-cover opacity-0 transition-opacity duration-500 group-hover:opacity-100 group-hover:scale-105"
+            className="object-cover opacity-0 transition-opacity duration-500 pointer-fine:group-hover:opacity-100 pointer-fine:group-hover:scale-105"
           />
         )}
         {!inStock && (

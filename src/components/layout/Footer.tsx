@@ -83,7 +83,7 @@ export function Footer() {
               </li>
               <li>
                 <a
-                  href="https://instagram.com/aanchal"
+                  href="https://www.instagram.com/__aanchal__in"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="hover:text-white transition-colors"
