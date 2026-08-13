@@ -29,10 +29,8 @@ dev_output.txt
 
 # Local env files — NEVER commit these
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+!.env.example
 
 # Vercel
 .vercel
