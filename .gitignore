@@ -40,3 +40,10 @@ dev_output.txt
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
+
+# Generated logs / temp artifacts
+/*.log
+tmp_*.html
+
+# Quarantine area (temporary)
+/useless/

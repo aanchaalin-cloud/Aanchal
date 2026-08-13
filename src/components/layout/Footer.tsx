@@ -72,8 +72,8 @@ export function Footer() {
             </h4>
             <ul className="space-y-2 text-sm text-white/60">
               <li>
-                <a href="mailto:hello@aanchal.in" className="hover:text-white transition-colors">
-                  hello@aanchal.in
+                <a href="mailto:aanchaal.in@gmail.com" className="hover:text-white transition-colors">
+                  aanchaal.in@gmail.com
                 </a>
               </li>
               <li>
