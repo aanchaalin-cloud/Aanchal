@@ -39,7 +39,7 @@ export function CartDrawer() {
           </div>
           <button
             onClick={closeCart}
-            className="flex h-8 w-8 items-center justify-center rounded text-[#6B6B6B] hover:bg-[#FFF0E8] hover:text-[#1C1C1C] transition-colors"
+            className="flex h-10 w-10 items-center justify-center rounded text-[#6B6B6B] hover:bg-[#FFF0E8] hover:text-[#1C1C1C] transition-colors"
             aria-label="Close cart"
           >
             <X className="h-5 w-5" />
@@ -104,10 +104,10 @@ export function CartDrawer() {
                               item.quantity - 1
                             )
                           }
-                          className="flex h-7 w-7 items-center justify-center text-[#6B6B6B] hover:bg-[#FFF0E8] transition-colors"
+                          className="flex h-9 w-9 items-center justify-center text-[#6B6B6B] hover:bg-[#FFF0E8] transition-colors"
                           aria-label="Decrease quantity"
                         >
-                          <Minus className="h-3 w-3" />
+                          <Minus className="h-3.5 w-3.5" />
                         </button>
                         <span className="w-8 text-center text-xs font-medium text-[#1C1C1C]">
                           {item.quantity}
@@ -123,7 +123,7 @@ export function CartDrawer() {
                           disabled={
                             item.quantity >= Math.min(item.available_stock, 10)
                           }
-                          className="flex h-7 w-7 items-center justify-center text-[#6B6B6B] hover:bg-[#FFF0E8] transition-colors disabled:opacity-30"
+                          className="flex h-9 w-9 items-center justify-center text-[#6B6B6B] hover:bg-[#FFF0E8] transition-colors disabled:opacity-30"
                           aria-label="Increase quantity"
                         >
                           <Plus className="h-3 w-3" />

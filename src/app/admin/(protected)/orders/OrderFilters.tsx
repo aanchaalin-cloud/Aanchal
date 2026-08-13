@@ -2,10 +2,13 @@
 
 import { useRouter, usePathname } from "next/navigation";
 
-const PAYMENT_STATUSES = ["all", "pending", "paid", "failed", "refunded"];
+const PAYMENT_STATUSES = ["all", "pending", "partially_paid", "paid", "failed", "refunded", "partially_refunded"];
 const ORDER_STATUSES = [
-  "all", "pending", "paid", "processing", "shipped", "delivered", "cancelled", "refunded",
+  "all", "pending", "confirmed", "in_production", "quality_check", "ready_to_ship",
+  "shipped", "out_for_delivery", "delivered", "cancelled", "returned", "failed",
 ];
+
+const labelize = (s: string) => (s === "all" ? "All" : s.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" "));
 
 type Props = {
   currentPaymentStatus: string;
@@ -41,7 +44,7 @@ export function OrderFilters({ currentPaymentStatus, currentOrderStatus }: Props
           className="rounded border border-stone-200 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-stone-900 bg-white"
         >
           {PAYMENT_STATUSES.map((s) => (
-            <option key={s} value={s}>{s === "all" ? "All payments" : s.charAt(0).toUpperCase() + s.slice(1)}</option>
+            <option key={s} value={s}>{labelize(s)}</option>
           ))}
         </select>
       </div>
@@ -53,7 +56,7 @@ export function OrderFilters({ currentPaymentStatus, currentOrderStatus }: Props
           className="rounded border border-stone-200 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-stone-900 bg-white"
         >
           {ORDER_STATUSES.map((s) => (
-            <option key={s} value={s}>{s === "all" ? "All statuses" : s.charAt(0).toUpperCase() + s.slice(1)}</option>
+            <option key={s} value={s}>{s === "all" ? "All statuses" : labelize(s)}</option>
           ))}
         </select>
       </div>

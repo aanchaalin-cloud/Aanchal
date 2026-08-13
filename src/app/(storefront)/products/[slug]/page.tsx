@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import {
-  getActiveProducts,
+  getActiveProductSlugs,
   getActiveProductBySlug,
   getRelatedProducts,
 } from "@/lib/queries/products";
@@ -32,6 +32,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title: product.name,
     description: product.description ?? `Shop ${product.name} at Aanchal`,
+    alternates: {
+      canonical: `/products/${product.slug}`,
+    },
     openGraph: {
       title: `${product.name} | Aanchal`,
       description: ogDescription,
@@ -71,8 +74,8 @@ function jsonLd(product: ProductWithDetails) {
 
 export async function generateStaticParams() {
   try {
-    const products = await getActiveProducts();
-    return products.map((p) => ({ slug: p.slug }));
+    const slugs = await getActiveProductSlugs();
+    return slugs.map((slug) => ({ slug }));
   } catch {
     return [];
   }
@@ -107,7 +110,9 @@ export default async function ProductDetailPage({ params }: Props) {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd(product)) }}
+        // Escape "<" so attacker-controlled product fields cannot break out of
+        // the JSON-LD script block (stored XSS).
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd(product)).replace(/</g, "\\u003c") }}
       />
       <ProductDetail product={product} relatedProducts={relatedProducts} />
     </>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/context/CartContext";
 import { formatPrice } from "@/lib/utils";
@@ -11,7 +11,7 @@ import type { CheckoutFormData, MeasurementData, RazorpayOrderResponse } from "@
 import { Messages } from "@/lib/messages";
 import {
   User, MapPin, Ruler, CreditCard, Check, ArrowLeft,
-  Tag, ShoppingBag, Truck, BadgePercent
+  Tag, ShoppingBag, Truck, BadgePercent, Megaphone
 } from "lucide-react";
 
 declare global {
@@ -36,7 +36,7 @@ const STEPS = [
   { id: 3, label: "Payment", icon: CreditCard },
 ];
 
-type FormErrors = Partial<Record<keyof CheckoutFormData | "chest" | "waist" | "full_height", string>>;
+type FormErrors = Partial<Record<keyof CheckoutFormData | "chest" | "waist" | "full_height" | "shoulder", string>>;
 
 function validateStep1(data: CheckoutFormData): FormErrors {
   const errors: FormErrors = {};
@@ -55,6 +55,7 @@ function validateStep2(data: MeasurementData): FormErrors {
   if (!data.chest || data.chest < 50 || data.chest > 150) errors.chest = "Chest must be 50-150 cm";
   if (!data.waist || data.waist < 40 || data.waist > 130) errors.waist = "Waist must be 40-130 cm";
   if (!data.full_height || data.full_height < 100 || data.full_height > 220) errors.full_height = "Height must be 100-220 cm";
+  if (!data.shoulder || data.shoulder < 25 || data.shoulder > 70) errors.shoulder = "Shoulder must be 25-70 cm";
   return errors;
 }
 
@@ -62,6 +63,7 @@ export default function CheckoutPage() {
   const router = useRouter();
   const { items, isHydrated, clearCart } = useCart();
   const [step, setStep] = useState(1);
+  const idempotencyKey = useRef<string | null>(null);
 
   const [form, setForm] = useState<CheckoutFormData>({
     customer_name: "",
@@ -78,6 +80,7 @@ export default function CheckoutPage() {
     chest: 0,
     waist: 0,
     full_height: 0,
+    shoulder: 0,
     unit: "cm",
     personalisation_request: "",
   });
@@ -87,6 +90,7 @@ export default function CheckoutPage() {
   const [couponApplied, setCouponApplied] = useState(false);
   const [couponError, setCouponError] = useState<string | null>(null);
   const [couponLoading, setCouponLoading] = useState(false);
+  const [referralCode, setReferralCode] = useState("");
 
   const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(false);
@@ -167,7 +171,7 @@ export default function CheckoutPage() {
     setCouponError(null);
   };
 
-  const shippingFee = displaySubtotal >= 999 ? 0 : 99;
+  const shippingFee = 99;
   const discountedSubtotal = Math.max(0, displaySubtotal - couponDiscount);
   const totalAmount = discountedSubtotal + shippingFee;
   const prepaidAmount = paymentMethod === "cod" ? Math.ceil(totalAmount / 2) : totalAmount;
@@ -210,6 +214,10 @@ export default function CheckoutPage() {
         quantity: item.quantity,
       }));
 
+      if (!idempotencyKey.current) {
+        idempotencyKey.current = `co-${crypto.randomUUID()}`;
+      }
+
       const res = await fetch("/api/checkout/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -218,7 +226,9 @@ export default function CheckoutPage() {
           measurements,
           payment_method: paymentMethod,
           coupon_code: couponApplied ? couponCode.trim() : undefined,
+          referral_code: referralCode.trim() || undefined,
           cartItems,
+          idempotency_key: idempotencyKey.current,
         }),
       });
 
@@ -232,13 +242,25 @@ export default function CheckoutPage() {
 
       const orderData = data.data as RazorpayOrderResponse;
 
-      if (paymentMethod === "cod") {
+      const goToStatus = () => {
         clearCart();
         const params = new URLSearchParams({
           orderId: orderData.orderId,
           statusToken: orderData.statusToken,
         });
         router.push(`/order-success?${params.toString()}`);
+      };
+
+      // Already paid in a previous attempt — go straight to the status page.
+      if (orderData.alreadyPaid) {
+        goToStatus();
+        return;
+      }
+
+      // Paytm — redirect to the Paytm payment page.
+      if (orderData.paymentGateway === "paytm" && orderData.paytm) {
+        clearCart();
+        window.location.href = orderData.paytm.redirectUrl;
         return;
       }
 
@@ -281,12 +303,7 @@ export default function CheckoutPage() {
           const verifyData = await verifyRes.json();
 
           if (verifyData.success) {
-            clearCart();
-            const params = new URLSearchParams({
-              orderId: orderData.orderId,
-              statusToken: orderData.statusToken,
-            });
-            router.push(`/order-success?${params.toString()}`);
+            goToStatus();
           } else {
             setApiError(verifyData.error ?? Messages.paymentVerificationFailed);
           }
@@ -490,7 +507,7 @@ export default function CheckoutPage() {
                     )}
                     <div className="flex justify-between text-[#6B6B6B]">
                       <span className="flex items-center gap-1"><Truck className="h-3 w-3" /> Shipping</span>
-                      <span>{shippingFee === 0 ? "Free" : formatPrice(shippingFee)}</span>
+                      <span>{formatPrice(shippingFee)}</span>
                     </div>
                     {paymentMethod === "prepaid" && displaySubtotal > 0 && (
                       <div className="flex justify-between text-green-600">
@@ -518,7 +535,7 @@ export default function CheckoutPage() {
 
                   <div className="mt-3 rounded-sm bg-[#FFF0E8] p-3">
                     <p className="text-xs text-[#6B6B6B]">
-                      Custom fit: Chest {measurements.chest} cm, Waist {measurements.waist} cm, Height {measurements.full_height} cm
+                      Custom fit: Chest {measurements.chest} cm, Waist {measurements.waist} cm, Height {measurements.full_height} cm, Shoulder {measurements.shoulder} cm
                     </p>
                     {measurements.personalisation_request && (
                       <p className="mt-1 text-xs text-[#6B6B6B] italic">
@@ -600,6 +617,24 @@ export default function CheckoutPage() {
                 {couponError && <p className="mt-1 text-xs text-[#C41E3A]">{couponError}</p>}
               </div>
 
+              {/* Influencer referral */}
+              <div className="border-t border-[#E5D5C5]/50 pt-3">
+                <label htmlFor="referral-code" className="block text-xs font-medium text-[#1C1C1C] mb-1">
+                  <Megaphone className="inline h-3 w-3 mr-1" /> Influencer Referral Code
+                </label>
+                <input
+                  id="referral-code"
+                  type="text"
+                  value={referralCode}
+                  onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+                  placeholder="Enter code"
+                  className="w-full rounded border border-[#E5D5C5] bg-white px-3 py-2 text-xs text-[#1C1C1C] placeholder:text-[#6B6B6B]/80 focus:outline-none focus:ring-2 focus:ring-[#95271D]"
+                />
+                <p className="mt-1 text-xs text-[#6B6B6B]">
+                  Have an influencer code? Apply 10% off (up to ₹500).
+                </p>
+              </div>
+
               <div className="border-t border-[#E5D5C5]/50 pt-3 space-y-2 text-sm">
                 <div className="flex justify-between text-[#6B6B6B]">
                   <span>Subtotal</span>
@@ -613,7 +648,7 @@ export default function CheckoutPage() {
                 )}
                 <div className="flex justify-between text-[#6B6B6B]">
                   <span>Shipping</span>
-                  <span>{shippingFee === 0 ? "Free" : formatPrice(shippingFee)}</span>
+                  <span>{formatPrice(shippingFee)}</span>
                 </div>
               </div>
 

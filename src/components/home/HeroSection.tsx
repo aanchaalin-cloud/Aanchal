@@ -2,9 +2,13 @@
 
 import { useRef, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { ChevronDown, Play } from "lucide-react";
+import { getSectionContent, type HomepageSectionContent } from "@/lib/homepage-sections";
 
-export function HeroSection() {
+export function HeroSection({ content }: { content?: HomepageSectionContent }) {
+  const c = getSectionContent("hero", content);
+  const videoUrl = c.videoUrl || "/Video1.mp4";
   const videoRef = useRef<HTMLVideoElement>(null);
   const sectionRef = useRef<HTMLElement>(null);
   const [showReplay, setShowReplay] = useState(false);
@@ -41,41 +45,49 @@ export function HeroSection() {
         autoPlay
         muted
         playsInline
+        preload="metadata"
+        poster="/anarkali.webp"
         onEnded={() => setShowReplay(true)}
         className="absolute inset-0 h-full w-full object-cover"
       >
-        <source src="/Video1.mp4" type="video/mp4" />
+        <source src={videoUrl} type="video/mp4" />
       </video>
 
       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-[#95271D]/20 to-transparent" />
 
       <div className="relative z-10 flex items-center justify-center min-h-screen pt-16">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 w-full">
-          <div className="max-w-xl text-center sm:text-left">
-            <p className="text-sm font-semibold uppercase tracking-[0.25em] text-white/80">
-              Indian Craftsmanship, Modern Silhouettes
+          <div className="max-w-xl rounded-lg bg-black/15 p-6 backdrop-blur-sm text-center sm:text-left">
+            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-white/80">
+              {c.eyebrow || "Premium Indian Ethnic Wear"}
             </p>
-            <h1 className="mt-4 text-6xl font-bold leading-tight text-white sm:text-7xl lg:text-8xl">
-              AANCHAL
-            </h1>
-            <p className="mt-4 text-lg text-white/80 font-light tracking-wide">
-              Where Heritage Meets Grace
+            <div className="mt-4 flex justify-center sm:justify-start">
+              <div className="inline-flex items-center rounded-full bg-white/95 px-6 py-3 shadow-xl sm:px-8 sm:py-4">
+                <Image
+                  src="/logo.png"
+                  alt="Aanchal"
+                  width={952}
+                  height={224}
+                  priority
+                  className="h-10 w-auto object-contain sm:h-14 lg:h-16"
+                />
+              </div>
+            </div>
+            <p className="mt-4 text-xl text-white/90 font-light tracking-wide sm:text-2xl">
+              {c.headline || "Premium Exotic Anarkali"}
             </p>
-            <p className="mt-2 max-w-md text-sm text-white/60 leading-relaxed">
-              Handcrafted clothing that honours tradition while embracing the elegance of contemporary design.
+            <p className="mt-3 text-base font-medium text-[#D4A843] sm:text-lg">
+              {c.subheadline || "Custom Tailored for You"}
             </p>
-            <div className="mt-8 flex flex-wrap items-center gap-4 justify-center sm:justify-start">
+            <p className="mt-2 max-w-md text-sm text-white/70 leading-relaxed">
+              {c.description || "Order Today — handcrafted ethnic wear made to your measurements."}
+            </p>
+            <div className="mt-8 flex items-center justify-center sm:justify-start">
               <Link
-                href="/shop"
-                className="inline-flex items-center gap-2 rounded bg-[#800020] px-6 py-3 text-sm font-medium text-white hover:bg-[#66001A] transition-colors"
+                href={c.ctaHref || "/shop"}
+                className="inline-flex items-center gap-2 rounded-full bg-[#800020] px-8 py-3.5 text-sm font-bold text-white shadow-lg transition-colors hover:bg-[#95271D]"
               >
-                Explore Collection
-              </Link>
-              <Link
-                href="/shop?sort=newest"
-                className="inline-flex items-center gap-2 rounded border border-white/40 px-6 py-3 text-sm font-medium text-white hover:bg-white/10 transition-colors"
-              >
-                New Arrivals
+                {c.ctaLabel || "Shop Now"}
               </Link>
             </div>
           </div>

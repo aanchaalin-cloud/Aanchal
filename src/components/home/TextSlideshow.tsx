@@ -1,44 +1,81 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Bell, Instagram, Mail, ArrowRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import Link from "next/link";
+import { getSectionContent, type HomepageSectionContent } from "@/lib/homepage-sections";
+import { getSectionIcon } from "@/lib/section-icons";
 
-const SLIDES = [
-  {
-    icon: Bell,
-    title: "Get Notified",
-    subtitle: "Be the first to know about new drops",
-    description: "Sign up for exclusive updates on our latest collections, restocks, and special offers delivered straight to your inbox.",
-    action: { label: "Subscribe", href: "/contact" },
-  },
-  {
-    icon: Instagram,
-    title: "Follow Us",
-    subtitle: "Join the Aanchal community",
-    description: "Follow us on Instagram for behind-the-scenes content, styling inspiration, and a closer look at the craftsmanship behind every piece.",
-    action: { label: "Follow @aanchal", href: "#" },
-  },
-  {
-    icon: Mail,
-    title: "Contact Us",
-    subtitle: "We'd love to hear from you",
-    description: "Have a question about sizing, shipping, or custom orders? Our team is here to help you find the perfect piece.",
-    action: { label: "Get in Touch", href: "/contact" },
-  },
-];
+type Slide = {
+  icon: ReturnType<typeof getSectionIcon>;
+  title: string;
+  subtitle: string;
+  description: string;
+  action: { label: string; href: string };
+};
 
-export function TextSlideshow() {
+function buildSlides(content?: HomepageSectionContent): Slide[] {
+  const c = getSectionContent("text-slideshow", content);
+  const items = c.items?.length
+    ? c.items
+    : [
+        {
+          icon: "Bell",
+          title: "Get Notified",
+          subtitle: "Be the first to know about new drops",
+          description:
+            "Sign up for exclusive updates on our latest collections, restocks, and special offers delivered straight to your inbox.",
+          actionLabel: "Subscribe",
+          actionHref: "/contact",
+        },
+        {
+          icon: "Instagram",
+          title: "Follow Us",
+          subtitle: "Join the Aanchal community",
+          description:
+            "Follow us on Instagram for behind-the-scenes content, styling inspiration, and a closer look at the craftsmanship behind every piece.",
+          actionLabel: "Follow @aanchal",
+          actionHref: "/contact",
+        },
+        {
+          icon: "Mail",
+          title: "Contact Us",
+          subtitle: "We’d love to hear from you",
+          description:
+            "Have a question about sizing, shipping, or custom orders? Our team is here to help you find the perfect piece.",
+          actionLabel: "Get in Touch",
+          actionHref: "/contact",
+        },
+      ];
+
+  return items
+    .map((item) => ({
+      icon: getSectionIcon(item.icon),
+      title: item.title || "Untitled",
+      subtitle: item.subtitle || "",
+      description: item.description || "",
+      action: {
+        label: item.actionLabel || "Learn More",
+        href: item.actionHref && item.actionHref !== "#" ? item.actionHref : "/",
+      },
+    }))
+    .filter((slide) => slide.title);
+}
+
+export function TextSlideshow({ content }: { content?: HomepageSectionContent }) {
+  const SLIDES = buildSlides(content);
   const [current, setCurrent] = useState(0);
 
   const next = useCallback(() => {
-    setCurrent((prev) => (prev + 1) % SLIDES.length);
-  }, []);
+    setCurrent((prev) => (prev + 1) % Math.max(SLIDES.length, 1));
+  }, [SLIDES.length]);
 
   useEffect(() => {
     const timer = setInterval(next, 6000);
     return () => clearInterval(timer);
   }, [next]);
+
+  if (SLIDES.length === 0) return null;
 
   return (
     <section className="bg-[#95271D] py-24">

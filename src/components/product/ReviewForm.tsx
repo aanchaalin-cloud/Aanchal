@@ -20,6 +20,33 @@ export function ReviewForm({ productId, onSubmitted }: ReviewFormProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [images, setImages] = useState<File[]>([]);
+  const [previews, setPreviews] = useState<string[]>([]);
+
+  const MAX_IMAGES = 3;
+  const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    const arr = Array.from(files).slice(0, MAX_IMAGES);
+
+    const bad = arr.find((f) => f.size > MAX_SIZE);
+    if (bad) {
+      setError(`Each image must be smaller than ${MAX_SIZE / (1024 * 1024)} MB`);
+      return;
+    }
+
+    setImages(arr);
+    const urls = arr.map((f) => URL.createObjectURL(f));
+    setPreviews(urls);
+  };
+
+  const clearImages = () => {
+    previews.forEach((p) => URL.revokeObjectURL(p));
+    setImages([]);
+    setPreviews([]);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,18 +63,31 @@ export function ReviewForm({ productId, onSubmitted }: ReviewFormProps) {
 
     setLoading(true);
     try {
-      const res = await fetch("/api/reviews", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          product_id: productId,
-          customer_name: name,
-          customer_email: email,
-          rating,
-          title: title || undefined,
-          body,
-        }),
-      });
+      let res: Response;
+      if (images.length > 0) {
+        const fd = new FormData();
+        fd.append("product_id", productId);
+        fd.append("customer_name", name);
+        fd.append("customer_email", email);
+        fd.append("rating", String(rating));
+        if (title) fd.append("title", title);
+        fd.append("body", body);
+        images.forEach((img) => fd.append("images", img));
+        res = await fetch("/api/reviews", { method: "POST", body: fd });
+      } else {
+        res = await fetch("/api/reviews", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            product_id: productId,
+            customer_name: name,
+            customer_email: email,
+            rating,
+            title: title || undefined,
+            body,
+          }),
+        });
+      }
 
       const data = await res.json();
 
@@ -62,6 +102,7 @@ export function ReviewForm({ productId, onSubmitted }: ReviewFormProps) {
       setRating(0);
       setTitle("");
       setBody("");
+      clearImages();
       onSubmitted?.();
     } catch {
       setError(Messages.somethingWentWrong);
@@ -167,6 +208,26 @@ export function ReviewForm({ productId, onSubmitted }: ReviewFormProps) {
           placeholder="Tell others about your experience with this product..."
         />
         <p className="mt-1 text-right text-[10px] text-[#6B6B6B]">{body.length}/2000</p>
+      </div>
+
+      {/* Image uploads */}
+      <div>
+        <label className="block text-xs font-medium text-[#1C1C1C] mb-1">Add images (optional, up to 3)</label>
+        <input
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={handleFileChange}
+          className="text-sm"
+        />
+        {previews.length > 0 && (
+          <div className="mt-2 flex gap-2 overflow-x-auto">
+            {previews.map((p, i) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img key={p} src={p} alt={`preview-${i}`} className="h-20 w-20 rounded object-cover" />
+            ))}
+          </div>
+        )}
       </div>
 
       {error && <p className="text-xs text-[#C41E3A]">{error}</p>}

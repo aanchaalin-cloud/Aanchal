@@ -1,138 +1,186 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { Star } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Star, ChevronLeft, ChevronRight } from "lucide-react";
+import { getSectionContent, type HomepageSectionContent } from "@/lib/homepage-sections";
 
-const REVIEWS = [
-  {
-    name: "Priya S.",
-    location: "Mumbai",
-    rating: 5,
-    text: "Absolutely in love with my silk saree! The quality is exceptional and the craftsmanship is evident in every detail. Received so many compliments at the wedding.",
-  },
-  {
-    name: "Anita K.",
-    location: "Delhi",
-    rating: 5,
-    text: "The fit of the kurta set is perfect. I appreciate how the brand blends traditional aesthetics with modern silhouettes. Fast shipping and beautiful packaging too!",
-  },
-  {
-    name: "Rohini M.",
-    location: "Bangalore",
-    rating: 5,
-    text: "Ordered the fusion wear set for a family function and it was a hit. The fabric is comfortable, the colors are rich, and the embroidery is stunning.",
-  },
-  {
-    name: "Meera J.",
-    location: "Pune",
-    rating: 5,
-    text: "Aanchal has become my go-to for ethnic wear. The attention to detail, the quality of fabric, and the customer service are all outstanding.",
-  },
-  {
-    name: "Deepa R.",
-    location: "Chennai",
-    rating: 5,
-    text: "The custom fit option is a game changer. I finally have a lehenga that fits perfectly without alterations. The personalisation request was handled beautifully.",
-  },
-  {
-    name: "Kavitha N.",
-    location: "Hyderabad",
-    rating: 5,
-    text: "Bought the Anarkali set for my sister's engagement. Everyone thought it was designer! The gold thread work is exquisite and the fabric drapes like a dream.",
-  },
-  {
-    name: "Shreya P.",
-    location: "Kolkata",
-    rating: 5,
-    text: "I was nervous ordering online but the measurements form was so easy to follow. The dress fits like it was made for me — because it literally was! Will order again.",
-  },
-  {
-    name: "Nandini V.",
-    location: "Jaipur",
-    rating: 5,
-    text: "The Bandhani print kurta is stunning. Rich colours, comfortable cotton, and the handloom feel is authentic. Aanchal truly honours Indian textile traditions.",
-  },
-  {
-    name: "Fatima Z.",
-    location: "Lucknow",
-    rating: 5,
-    text: "Beautiful chikankari work on the white kurta set. I wore it to an Eid gathering and received endless compliments. The packaging was lovely too — felt like unwrapping a gift.",
-  },
-  {
-    name: "Lakshmi T.",
-    location: "Coimbatore",
-    rating: 5,
-    text: "Third order from Aanchal and they never disappoint. The consistency in quality is what keeps me coming back. My mother loves their cotton sarees.",
-  },
-];
+const SLIDE_MS = 3500;
+
+type Review = {
+  name: string;
+  location: string;
+  rating: number;
+  text: string;
+};
+
+function buildReviews(content?: HomepageSectionContent): Review[] {
+  const c = getSectionContent("reviews", content);
+  const items = c.items ?? [];
+  return items
+    .map((item) => ({
+      name: item.name || "Aanchal Customer",
+      location: item.location || "",
+      rating: Math.max(1, Math.min(5, item.rating ?? 5)),
+      text: item.text || "",
+    }))
+    .filter((review) => review.text);
+}
 
 function getInitial(name: string) {
   return name.charAt(0);
 }
 
-export function ReviewsSection() {
-  const [current, setCurrent] = useState(0);
+function ReviewCard({ review }: { review: Review }) {
+  return (
+    <div className="h-full rounded-2xl border-2 border-[#95271D] bg-white p-8 sm:p-10">
+      <div className="mb-5 flex items-center gap-1">
+        {Array.from({ length: review.rating }, (_, i) => (
+          <Star key={i} className="h-4 w-4 fill-[#D4A843] text-[#D4A843]" />
+        ))}
+      </div>
+      <blockquote className="text-base italic leading-relaxed text-[#6B6B6B] sm:text-lg">
+        &ldquo;{review.text}&rdquo;
+      </blockquote>
+      <div className="mt-6 flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#95271D] text-sm font-bold text-[#D4A843]">
+          {getInitial(review.name)}
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-[#1C1C1C]">{review.name}</p>
+          <p className="text-xs text-[#6B6B6B]">{review.location}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-  const next = useCallback(() => {
-    setCurrent((prev) => (prev + 1) % REVIEWS.length);
+export function ReviewsSection({ content }: { content?: HomepageSectionContent }) {
+  const c = getSectionContent("reviews", content);
+  const REVIEWS = buildReviews(content);
+  const [index, setIndex] = useState(0);
+  const [perView, setPerView] = useState(1);
+  const [visible, setVisible] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(false);
+  const sectionRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setVisible(entry.isIntersecting),
+      { threshold: 0.15 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
-    const timer = setInterval(next, 3000);
-    return () => clearInterval(timer);
-  }, [next]);
+    const compute = () =>
+      setPerView(window.innerWidth < 640 ? 1 : window.innerWidth < 1024 ? 2 : 3);
+    compute();
+    window.addEventListener("resize", compute);
+    return () => window.removeEventListener("resize", compute);
+  }, []);
 
-  const review = REVIEWS[current];
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReducedMotion(mq.matches);
+    const onChange = (e: MediaQueryListEvent) => setReducedMotion(e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  const maxIndex = Math.max(0, REVIEWS.length - perView);
+
+  useEffect(() => {
+    if (index > maxIndex) setIndex(maxIndex);
+  }, [maxIndex, index]);
+
+  useEffect(() => {
+    if (!visible || hovered || reducedMotion) return;
+    const timer = setInterval(
+      () =>
+        setIndex((prev) => (prev + 1 > maxIndex ? 0 : prev + 1)),
+      SLIDE_MS
+    );
+    return () => clearInterval(timer);
+  }, [visible, hovered, reducedMotion, maxIndex]);
+
+  const goTo = useCallback((nextIndex: number) => {
+    setIndex(Math.max(0, Math.min(nextIndex, REVIEWS.length - 1)));
+  }, [REVIEWS.length]);
+
+  if (REVIEWS.length === 0) return null;
 
   return (
-    <section className="py-20">
-      <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-12">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#95271D]">
-            Testimonials
-          </p>
-          <h2 className="mt-2 text-3xl font-semibold text-[#1C1C1C]">
-            What Our Customers Say
-          </h2>
+    <section
+      ref={sectionRef}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className="overflow-hidden py-20"
+    >
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="mb-12 flex flex-col items-center justify-between gap-4 sm:flex-row sm:items-end">
+          <div className="text-center sm:text-left">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#95271D]">
+              {c.eyebrow || "Testimonials"}
+            </p>
+            <h2 className="mt-2 text-3xl font-semibold text-[#1C1C1C]">
+              {c.headline || "What Our Customers Say"}
+            </h2>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => goTo(index - 1)}
+              disabled={index === 0}
+              aria-label="Previous reviews"
+              className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-[#95271D] text-[#800020] transition-colors hover:bg-[#FFF0E8] disabled:opacity-40 disabled:hover:bg-transparent"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => goTo(index + 1)}
+              disabled={index >= maxIndex}
+              aria-label="Next reviews"
+              className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-[#95271D] text-[#800020] transition-colors hover:bg-[#FFF0E8] disabled:opacity-40 disabled:hover:bg-transparent"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
-        {/* Review card with visible stroke border */}
-        <div className="mx-auto max-w-2xl rounded-2xl border-[3px] border-[#95271D] bg-white p-8 sm:p-10 transition-all duration-500 animate-fade-in">
-          {/* Stars */}
-          <div className="flex items-center gap-1 mb-5">
-            {Array.from({ length: review.rating }).map((_, i) => (
-              <Star key={i} className="h-4 w-4 fill-[#D4A843] text-[#D4A843]" />
+        <div className="overflow-hidden">
+          <div
+            className={
+              reducedMotion ? "flex" : "flex transition-transform duration-700 ease-in-out"
+            }
+            style={{ transform: `translateX(-${(index * 100) / perView}%)` }}
+          >
+            {REVIEWS.map((review, idx) => (
+              <div
+                key={`${review.name}-${idx}`}
+                className="w-full shrink-0 px-2 sm:w-1/2 sm:px-3 lg:w-1/3"
+              >
+                <ReviewCard review={review} />
+              </div>
             ))}
           </div>
-
-          {/* Quote */}
-          <blockquote className="text-base leading-relaxed text-[#6B6B6B] italic sm:text-lg">
-            &ldquo;{review.text}&rdquo;
-          </blockquote>
-
-          {/* Author */}
-          <div className="mt-6 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#95271D] text-[#D4A843] text-sm font-bold">
-              {getInitial(review.name)}
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-[#1C1C1C]">{review.name}</p>
-              <p className="text-xs text-[#6B6B6B]">{review.location}</p>
-            </div>
-          </div>
         </div>
 
-        {/* Dots */}
         <div className="mt-8 flex items-center justify-center gap-2">
-          {REVIEWS.map((_, idx) => (
+          {Array.from({ length: maxIndex + 1 }, (_, idx) => (
             <button
               key={idx}
               type="button"
-              onClick={() => setCurrent(idx)}
+              onClick={() => goTo(idx)}
               className={`h-2 rounded-full transition-all ${
-                idx === current ? "w-6 bg-[#95271D]" : "w-2 bg-[#E5D5C5]"
+                idx === index ? "w-6 bg-[#95271D]" : "w-2 bg-[#E5D5C5]"
               }`}
-              aria-label={`Go to review ${idx + 1}`}
+              aria-label={`Go to reviews ${idx + 1}`}
             />
           ))}
         </div>

@@ -56,7 +56,7 @@ export async function getOrderByIdAdmin(
         unit_price, quantity, line_total
       ),
       order_measurements (
-        id, chest, waist, full_height, unit, personalisation_request
+        id, chest, waist, full_height, shoulder, unit, personalisation_request
       )
     `
     )

@@ -5,6 +5,7 @@ import {
   type SetAllCookies,
 } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { getRequiredServerEnv } from "@/lib/env";
 
 async function getCookieContext() {
   try {
@@ -25,10 +26,12 @@ const safeFetch: typeof fetch = async (input, init) => {
 
 export async function createClient() {
   const { store } = await getCookieContext();
+  const supabaseUrl = getRequiredServerEnv("NEXT_PUBLIC_SUPABASE_URL");
+  const supabaseAnonKey = getRequiredServerEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY");
 
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
         getAll() {
@@ -52,10 +55,12 @@ export async function createClient() {
 
 export async function createServiceClient() {
   const { store } = await getCookieContext();
+  const supabaseUrl = getRequiredServerEnv("NEXT_PUBLIC_SUPABASE_URL");
+  const serviceRoleKey = getRequiredServerEnv("SUPABASE_SERVICE_ROLE_KEY");
 
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    supabaseUrl,
+    serviceRoleKey,
     {
       cookies: {
         getAll() {

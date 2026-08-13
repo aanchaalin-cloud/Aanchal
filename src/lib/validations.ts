@@ -1,6 +1,22 @@
 import { z } from "zod";
 
 // ============================================================
+// SAFE URL
+// Allows relative paths, anchors, and http(s)/mailto/tel only.
+// Blocks javascript: and other dangerous schemes that could run
+// when a value is used as an href or resource URL.
+// ============================================================
+export const safeUrl = z
+  .string()
+  .max(2000)
+  .refine(
+    (v) =>
+      v === "" ||
+      /^(https?:\/\/|mailto:|tel:|\/|#|\.\/|\.\.\/)/i.test(v),
+    "URL must start with http(s), mailto, tel, /, or #"
+  );
+
+// ============================================================
 // MEASUREMENT SCHEMA
 // Validates custom fit measurements in centimetres (cm).
 // Sensible range: chest 50-150cm, waist 40-130cm, height 100-220cm
@@ -18,6 +34,10 @@ export const measurementSchema = z.object({
     .number()
     .min(100, "Height must be at least 100 cm")
     .max(220, "Height must be at most 220 cm"),
+  shoulder: z
+    .number()
+    .min(25, "Shoulder must be at least 25 cm")
+    .max(70, "Shoulder must be at most 70 cm"),
   unit: z.literal("cm"),
   personalisation_request: z
     .string()
@@ -60,13 +80,6 @@ export const couponSchema = z
   );
 
 export type CouponInput = z.infer<typeof couponSchema>;
-
-// ============================================================
-// COUPON APPLICATION SCHEMA (Customer)
-// ============================================================
-export const applyCouponSchema = z.object({
-  code: z.string().min(1, "Coupon code is required").max(50),
-});
 
 // ============================================================
 // REVIEW SCHEMA (Customer)
@@ -134,6 +147,13 @@ export const checkoutSchema = z.object({
   payment_method: z.enum(["prepaid", "cod"]),
   // Coupon code (optional)
   coupon_code: z.string().max(50).optional(),
+  // Influencer referral code (optional)
+  referral_code: z
+    .string()
+    .max(50)
+    .regex(/^[A-Za-z0-9]+$/, "Referral code must be alphanumeric")
+    .optional()
+    .or(z.literal("")),
   // Cart items — validated but prices are NOT trusted (recalculated server-side)
   cartItems: z
     .array(
@@ -149,6 +169,14 @@ export const checkoutSchema = z.object({
     )
     .min(1, "Cart cannot be empty")
     .max(20, "Too many items in cart"),
+  // Client-generated key so a double-submit returns the same order instead of
+  // creating a duplicate.
+  idempotency_key: z
+    .string()
+    .min(8, "Invalid idempotency key")
+    .max(100)
+    .regex(/^[A-Za-z0-9_-]+$/, "Invalid idempotency key")
+    .optional(),
 });
 
 export type CheckoutInput = z.infer<typeof checkoutSchema>;
@@ -171,6 +199,26 @@ export const paymentVerificationSchema = z.object({
 });
 
 export type PaymentVerificationInput = z.infer<typeof paymentVerificationSchema>;
+
+// ============================================================
+// PAYTM VERIFICATION SCHEMA (Customer)
+// Re-confirms a Paytm transaction via the server-side status API.
+// ============================================================
+export const paytmVerificationSchema = z.object({
+  provider: z.literal("paytm"),
+  orderId: z.string().uuid("Invalid order ID"),
+  paytmOrderId: z.string().min(1, "Missing Paytm order ID").max(60),
+});
+
+export type PaytmVerificationInput = z.infer<typeof paytmVerificationSchema>;
+
+// ============================================================
+// PAYMENT VERIFICATION REQUEST (union of provider checks)
+// ============================================================
+export const paymentVerificationRequestSchema = z.union([
+  paymentVerificationSchema.extend({ provider: z.literal("razorpay").optional() }),
+  paytmVerificationSchema,
+]);
 
 // ============================================================
 // PRODUCT FORM SCHEMA (Admin)
@@ -281,8 +329,63 @@ export const orderStatusSchema = z.object({
   ]),
   notes: z.string().max(500).optional(),
   tracking_id: z.string().max(200).optional(),
-  tracking_url: z.string().max(2000).optional(),
+  tracking_url: safeUrl.optional(),
   shipping_provider: z.string().max(100).optional(),
 });
 
 export type OrderStatusInput = z.infer<typeof orderStatusSchema>;
+
+// ============================================================
+// HOMEPAGE SECTION SCHEMAS (Admin)
+// ============================================================
+export const homepageSectionItemSchema = z.object({
+  icon: z.string().max(40).optional().nullable(),
+  text: z.string().max(500).optional().nullable(),
+  title: z.string().max(200).optional().nullable(),
+  subtitle: z.string().max(200).optional().nullable(),
+  description: z.string().max(2000).optional().nullable(),
+  actionLabel: z.string().max(100).optional().nullable(),
+  actionHref: safeUrl.optional().nullable(),
+  location: z.string().max(100).optional().nullable(),
+  rating: z.number().int().min(0).max(5).optional().nullable(),
+});
+
+export const homepageSectionContentSchema = z.object({
+  eyebrow: z.string().max(200).optional().nullable(),
+  headline: z.string().max(300).optional().nullable(),
+  subheadline: z.string().max(300).optional().nullable(),
+  description: z.string().max(3000).optional().nullable(),
+  ctaLabel: z.string().max(100).optional().nullable(),
+  ctaHref: safeUrl.optional().nullable(),
+  badge: z.string().max(200).optional().nullable(),
+  message: z.string().max(1000).optional().nullable(),
+  videoUrl: safeUrl.optional().nullable(),
+  imageUrl: safeUrl.optional().nullable(),
+  items: z.array(homepageSectionItemSchema).max(50).optional(),
+});
+
+export const homepageSectionCreateSchema = z.object({
+  section_key: z
+    .string()
+    .min(1, "Section type is required")
+    .max(100)
+    .regex(/^[a-z0-9-]+$/, "Invalid section key"),
+  title: z.string().min(1, "Title is required").max(200),
+  content: homepageSectionContentSchema.default({}),
+});
+
+export const homepageSectionUpdateSchema = z.object({
+  title: z.string().min(1, "Title is required").max(200).optional(),
+  is_active: z.boolean().optional(),
+  sort_order: z.number().int().min(0).max(99999).optional(),
+  content: homepageSectionContentSchema.partial().optional(),
+});
+
+export const homepageSectionReorderSchema = z.object({
+  ids: z.array(z.string().uuid("Invalid section ID")).min(1).max(100),
+});
+
+export type HomepageSectionItemInput = z.infer<typeof homepageSectionItemSchema>;
+export type HomepageSectionContentInput = z.infer<typeof homepageSectionContentSchema>;
+export type HomepageSectionCreateInput = z.infer<typeof homepageSectionCreateSchema>;
+export type HomepageSectionUpdateInput = z.infer<typeof homepageSectionUpdateSchema>;

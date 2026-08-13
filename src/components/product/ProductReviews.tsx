@@ -1,61 +1,20 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import Image from "next/image";
 import { Star, CheckCircle } from "lucide-react";
-
-type Review = {
-  id: string;
-  customer_name: string;
-  rating: number;
-  title: string | null;
-  body: string;
-  is_verified_purchase: boolean;
-  created_at: string;
-};
+import type { ProductReview } from "@/types";
 
 type ProductReviewsProps = {
-  productId: string;
+  reviews: ProductReview[];
 };
 
-export function ProductReviews({ productId }: ProductReviewsProps) {
-  const [reviews, setReviews] = useState<Review[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [averageRating, setAverageRating] = useState(0);
-  const [totalReviews, setTotalReviews] = useState(0);
-
-  useEffect(() => {
-    async function fetchReviews() {
-      try {
-        const res = await fetch(`/api/reviews/product/${productId}`);
-        const data = await res.json();
-        if (data.success && data.data) {
-          setReviews(data.data);
-          if (data.data.length > 0) {
-            const avg = data.data.reduce((sum: number, r: Review) => sum + r.rating, 0) / data.data.length;
-            setAverageRating(Math.round(avg * 10) / 10);
-            setTotalReviews(data.data.length);
-          }
-        }
-      } catch {
-        // Silently fail — reviews are non-critical
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchReviews();
-  }, [productId]);
-
-  if (loading) {
-    return (
-      <div className="py-8 text-center">
-        <div className="mx-auto h-6 w-6 animate-pulse rounded-full bg-[#95271D]/20" />
-      </div>
-    );
-  }
-
+export function ProductReviews({ reviews }: ProductReviewsProps) {
   if (reviews.length === 0) {
     return null;
   }
+
+  const averageRating = Math.round((reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length) * 10) / 10;
+  const totalReviews = reviews.length;
 
   return (
     <div className="space-y-6">
@@ -107,6 +66,20 @@ export function ProductReviews({ productId }: ProductReviewsProps) {
               <p className="text-sm font-medium text-[#1C1C1C]">{review.title}</p>
             )}
             <p className="text-sm text-[#6B6B6B] mt-1 leading-relaxed">{review.body}</p>
+
+            {/* Review images (if any) */}
+            {Array.isArray(review.images) && review.images.length > 0 && (
+              <div className="mt-3">
+                <div className="flex gap-2 overflow-x-auto">
+                  {review.images.map((url: string, idx: number) => (
+                    <a key={url} href={url} target="_blank" rel="noreferrer" className="relative inline-block h-20 w-20 overflow-hidden rounded">
+                      <Image src={url} alt={`review-${review.id}-${idx}`} fill className="object-cover" />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <p className="text-[10px] text-[#6B6B6B] mt-2">
               {review.customer_name} · {new Date(review.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
             </p>

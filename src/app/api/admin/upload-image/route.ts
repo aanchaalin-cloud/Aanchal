@@ -43,6 +43,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const storagePath = `products/${productId}/${timestamp}-${safeName}`;
 
   const serviceClient = await createServiceClient();
+
+  const { data: product, error: productError } = await serviceClient
+    .from("products")
+    .select("id")
+    .eq("id", productId)
+    .maybeSingle();
+
+  if (productError || !product) {
+    return NextResponse.json({ success: false, error: "Product not found" }, { status: 404 });
+  }
+
   const { error: uploadError } = await serviceClient.storage.from("product-images").upload(storagePath, file, {
     contentType: file.type, upsert: false,
   });

@@ -71,4 +71,14 @@ export const Messages = {
   // Payment options
   prepaidDiscountApplied: "5% prepaid discount applied",
   codAmountDue: "Amount due at delivery",
+
+  // Homepage sections
+  adminHomepageLoadError: "Unable to load homepage sections. Please check the database connection and try again.",
+  adminHomepageCreateError: "Unable to add the section. Please try again.",
+  adminHomepageUpdateError: "Unable to save the section.",
+  adminHomepageDeleteError: "Unable to remove the section.",
+  adminHomepageReorderError: "Unable to reorder sections. Please try again.",
+  adminHomepageSectionExists: "This section type already exists on the homepage.",
+  adminHomepageSectionNotFound: "Section could not be found.",
+  adminHomepageImageUploadError: "Image upload failed. Please check file type, size, and storage configuration.",
 };

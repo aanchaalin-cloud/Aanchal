@@ -52,6 +52,25 @@ export function ProductForm({ product, mode }: Props) {
 
   const [images, setImages] = useState<ImageItem[]>([]);
   const [uploadProgress, setUploadProgress] = useState(false);
+  const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/admin/categories");
+        const data = await res.json();
+        if (data.success) {
+          setCategoryOptions(
+            (data.data ?? [])
+              .filter((c: { is_active: boolean }) => c.is_active)
+              .map((c: { name: string }) => c.name)
+          );
+        }
+      } catch {
+        // category picker is optional; free-text input still works
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     if (product?.product_images) {
@@ -320,7 +339,12 @@ export function ProductForm({ product, mode }: Props) {
           </div>
           <div>
             <label className="block text-xs font-medium text-stone-700 mb-1">Category *</label>
-            <input value={category} onChange={(e) => setCategory(e.target.value)} required placeholder="e.g. Sarees, Kurtas" className="w-full rounded border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-900" />
+            <input value={category} onChange={(e) => setCategory(e.target.value)} required list="category-options" placeholder="e.g. Sarees, Kurtas" className="w-full rounded border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-900" />
+            <datalist id="category-options">
+              {categoryOptions.map((c) => (
+                <option key={c} value={c} />
+              ))}
+            </datalist>
           </div>
           <div className="sm:col-span-2">
             <label className="block text-xs font-medium text-stone-700 mb-1">Description</label>

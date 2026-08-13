@@ -1,34 +1,28 @@
 import "server-only";
 
-import crypto from "node:crypto";
+import { hmacHex, timingSafeEqualHex } from "@/lib/crypto";
+import { getRequiredServerEnv } from "@/lib/env";
 import { unstable_noStore as noStore } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/server";
 import type { PublicOrderStatus } from "@/types";
 
 function getStatusSecret(): string {
-  const secret = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!secret) {
-    throw new Error("Service configuration is unavailable");
-  }
-  return secret;
+  // ORDER_STATUS_TOKEN_SECRET must be set explicitly. We intentionally avoid
+  // a fallback to SUPABASE_SERVICE_ROLE_KEY because that is a database secret and
+  // not appropriate for public token signing.
+  return getRequiredServerEnv("ORDER_STATUS_TOKEN_SECRET");
 }
 
 export function createOrderStatusToken(
   orderId: string,
-  razorpayOrderId: string
+  paymentReference: string
 ): string {
-  return crypto
-    .createHmac("sha256", getStatusSecret())
-    .update(`${orderId}|${razorpayOrderId}`)
-    .digest("hex");
+  return hmacHex(getStatusSecret(), `${orderId}|${paymentReference}`, "sha256");
 }
 
-function tokenMatches(expected: string, received: string): boolean {
+export function tokenMatches(expected: string, received: string): boolean {
   if (!/^[a-f0-9]{64}$/i.test(received)) return false;
-  return crypto.timingSafeEqual(
-    Buffer.from(expected, "hex"),
-    Buffer.from(received, "hex")
-  );
+  return timingSafeEqualHex(expected, received);
 }
 
 export async function getPublicOrderStatus(
@@ -41,21 +35,28 @@ export async function getPublicOrderStatus(
   const { data, error } = await supabase
     .from("orders")
     .select(
-      "id, payment_status, order_status, total_amount, created_at, razorpay_order_id"
+      "id, order_number, payment_status, order_status, total_amount, created_at, razorpay_order_id, paytm_order_id, payment_provider"
     )
     .eq("id", orderId)
     .single();
 
-  if (error || !data?.razorpay_order_id) return null;
+  if (error || !data) return null;
 
-  const expectedToken = createOrderStatusToken(data.id, data.razorpay_order_id);
+  // Status tokens are bound to a payment reference (Razorpay or Paytm order id).
+  const paymentReference = data.paytm_order_id ?? data.razorpay_order_id;
+  if (!paymentReference) return null;
+
+  const expectedToken = createOrderStatusToken(data.id, paymentReference);
   if (!tokenMatches(expectedToken, statusToken)) return null;
 
   return {
     id: data.id,
+    order_number: data.order_number,
     payment_status: data.payment_status,
     order_status: data.order_status,
     total_amount: Number(data.total_amount),
     created_at: data.created_at,
+    payment_provider: data.payment_provider,
+    paytm_order_id: data.paytm_order_id,
   } as PublicOrderStatus;
 }

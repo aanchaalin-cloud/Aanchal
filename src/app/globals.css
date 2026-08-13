@@ -1,11 +1,18 @@
 @import "tailwindcss";
 
+@utility scrollbar-hidden {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 @layer base {
   :root {
     --radius: 0.25rem;
-    --font-sans: "Hind", system-ui, sans-serif;
+    --font-sans: "Public Sans", system-ui, sans-serif;
     --font-serif: "Eczar", Georgia, serif;
-    --font-display: "Samarkan", serif;
+    --font-samarkan: "Samarkan", serif;
   }
 }
 
@@ -27,14 +34,20 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     background-color: #FFF8F3;
-    background-image: url("/bg.png");
-    background-attachment: fixed;
+    background-image: url("/bg.webp");
     background-position: center;
     background-size: cover;
     color: #1C1C1C;
   }
 
-  h1, h2 {
+  @media (hover: hover) and (pointer: fine) {
+    body {
+      background-attachment: fixed;
+    }
+  }
+
+  h1,
+  h2 {
     font-family: var(--font-display);
   }
 
@@ -44,6 +57,7 @@
 
   html {
     scroll-behavior: smooth;
+    overflow-x: clip;
   }
 
   :focus-visible {
@@ -61,7 +75,57 @@
     font-family: var(--font-display);
   }
 
+  .font-samarkan {
+    font-family: var(--font-samarkan);
+  }
+
   .text-balance {
     text-wrap: balance;
+  }
+
+  .input-field {
+    width: 100%;
+    border: 1px solid #d4c5b5;
+    border-radius: 0.25rem;
+    background-color: #fff;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    color: #1c1c1c;
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+
+  .input-field::placeholder {
+    color: #6b6b6b;
+  }
+
+  .input-field:focus {
+    outline: none;
+    border-color: transparent;
+    box-shadow: 0 0 0 2px #800020;
+  }
+
+  @keyframes marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
+
+  .marquee-track {
+    animation: marquee 45s linear infinite;
+  }
+
+  .marquee-track:hover {
+    animation-play-state: paused;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .marquee-track {
+      animation: none;
+    }
   }
 }

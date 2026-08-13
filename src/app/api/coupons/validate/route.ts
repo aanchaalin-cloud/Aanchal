@@ -21,7 +21,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (normalizedCode.startsWith("AANCHAL-")) {
     const { data: voucher, error: voucherError } = await supabase
       .from("reward_vouchers")
-      .select("id, code, value, expiry_date, is_used")
+      .select("id, code, value, expires_at, is_used")
       .eq("code", normalizedCode)
       .single();
 
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ success: false, error: "This voucher has already been used." }, { status: 400 });
     }
 
-    if (voucher.expiry_date && new Date(voucher.expiry_date) < new Date()) {
+    if (voucher.expires_at && new Date(voucher.expires_at) < new Date()) {
       return NextResponse.json({ success: false, error: "This voucher has expired." }, { status: 400 });
     }
 

@@ -2,22 +2,30 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, Package, ShoppingCart, LogOut, Star, Gift, Box } from "lucide-react";
+import { LayoutDashboard, Package, ShoppingCart, LogOut, Star, Gift, Box, Tag, Megaphone, Users, ShieldCheck, LayoutGrid, LayoutTemplate } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { href: "/admin/products", label: "Products", icon: Package, exact: false },
+  { href: "/admin/homepage", label: "Homepage", icon: LayoutTemplate, exact: true },
+  { href: "/admin/categories", label: "Categories", icon: LayoutGrid, exact: false },
   { href: "/admin/orders", label: "Orders", icon: ShoppingCart, exact: false },
+  { href: "/admin/customers", label: "Customers", icon: Users, exact: false },
   { href: "/admin/packaging", label: "Packaging", icon: Box, exact: false },
   { href: "/admin/reviews", label: "Reviews", icon: Star, exact: true },
   { href: "/admin/rewards", label: "Rewards", icon: Gift, exact: true },
+  { href: "/admin/coupons", label: "Coupons", icon: Tag, exact: true },
+  { href: "/admin/influencers", label: "Influencers", icon: Megaphone, exact: true },
+  { href: "/admin/team", label: "Team", icon: ShieldCheck, exact: true, superadmin: true },
 ];
 
-export function AdminNav({ userEmail }: { userEmail: string }) {
+export function AdminNav({ userEmail, role }: { userEmail: string; role: string }) {
   const pathname = usePathname();
   const router = useRouter();
+
+  const visibleItems = NAV_ITEMS.filter((item) => !("superadmin" in item) || role === "superadmin");
 
   const handleLogout = async () => {
     const supabase = createClient();
@@ -37,7 +45,7 @@ export function AdminNav({ userEmail }: { userEmail: string }) {
 
           {/* Nav */}
           <nav className="hidden sm:flex items-center gap-1">
-            {NAV_ITEMS.map((item) => {
+            {visibleItems.map((item) => {
               const active = item.exact
                 ? pathname === item.href
                 : pathname.startsWith(item.href);
@@ -61,6 +69,13 @@ export function AdminNav({ userEmail }: { userEmail: string }) {
 
           {/* Right */}
           <div className="flex items-center gap-3">
+            <span
+              className={`hidden rounded-full px-2 py-0.5 text-[10px] font-semibold sm:inline ${
+                role === "superadmin" ? "bg-amber-100 text-amber-800" : "bg-stone-100 text-stone-600"
+              }`}
+            >
+              {role === "superadmin" ? "Super Admin" : "Admin"}
+            </span>
             <span className="hidden sm:block text-xs text-stone-600 truncate max-w-[160px]">
               {userEmail}
             </span>
@@ -76,7 +91,7 @@ export function AdminNav({ userEmail }: { userEmail: string }) {
 
         {/* Mobile Nav */}
         <nav className="flex sm:hidden gap-1 pb-2 overflow-x-auto">
-          {NAV_ITEMS.map((item) => {
+          {visibleItems.map((item) => {
             const active = item.exact
               ? pathname === item.href
               : pathname.startsWith(item.href);

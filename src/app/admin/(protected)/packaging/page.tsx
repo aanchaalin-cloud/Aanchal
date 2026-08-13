@@ -13,17 +13,11 @@ const PACKAGING_BADGES: Record<PackagingStatus, { label: string; color: string; 
 };
 
 const STATUS_BADGES: Record<string, { label: string; color: string }> = {
-  pending: { label: "Pending", color: "bg-stone-100 text-stone-700" },
   confirmed: { label: "Confirmed", color: "bg-blue-100 text-blue-700" },
   in_production: { label: "In Production", color: "bg-amber-100 text-amber-700" },
   quality_check: { label: "QC", color: "bg-purple-100 text-purple-700" },
   ready_to_ship: { label: "Ready to Ship", color: "bg-green-100 text-green-700" },
   shipped: { label: "Shipped", color: "bg-indigo-100 text-indigo-700" },
-  out_for_delivery: { label: "Out for Delivery", color: "bg-cyan-100 text-cyan-700" },
-  delivered: { label: "Delivered", color: "bg-green-100 text-green-700" },
-  cancelled: { label: "Cancelled", color: "bg-red-100 text-red-700" },
-  returned: { label: "Returned", color: "bg-orange-100 text-orange-700" },
-  failed: { label: "Failed", color: "bg-red-100 text-red-700" },
 };
 
 export default async function PackagingPage() {
@@ -71,7 +65,7 @@ export default async function PackagingPage() {
     <div className="space-y-8">
       {/* Header */}
       <div>
-        <h1 className="font-serif text-2xl font-semibold text-stone-900">Packaging Queue</h1>
+        <h1 className="text-2xl font-semibold text-stone-900">Packaging Queue</h1>
         <p className="mt-1 text-sm text-stone-600">
           Track and manage order packaging status
         </p>

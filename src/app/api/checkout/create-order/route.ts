@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "node:crypto";
 import Razorpay from "razorpay";
 import { createServiceClient } from "@/lib/supabase/server";
 import { checkoutSchema } from "@/lib/validations";
@@ -6,10 +7,209 @@ import { rupeesToPaise } from "@/lib/utils";
 import { createOrderStatusToken } from "@/lib/orders/public-status";
 import { Messages } from "@/lib/messages";
 import { validateRequest } from "@/lib/api-utils";
+import {
+  getPaytmConfig,
+  initiateTransaction,
+  buildPaytmOrderId,
+  getProcessTransactionUrl,
+  type PaytmConfig,
+} from "@/lib/paytm";
+import { getProviderAdapter } from "@/lib/payments";
+import { INFLUENCER_COMMISSION_RATE } from "@/lib/orders/influencer-earnings";
 
-const FREE_SHIPPING_THRESHOLD = 999;
 const SHIPPING_FEE = 99;
 const PREPAID_DISCOUNT_RATE = 0.05;
+const INFLUENCER_DISCOUNT_CAP = 500;
+
+type OrderRow = {
+  id: string;
+  payment_status: string;
+  payment_method: string;
+  total_amount: number;
+  prepaid_amount: number;
+  cod_amount: number;
+  discount_amount: number;
+  customer_name: string;
+  customer_email: string;
+  customer_phone: string;
+  paytm_order_id: string | null;
+  razorpay_order_id: string | null;
+};
+
+function checkoutResponseData(
+  order: OrderRow,
+  gateway: "paytm" | "razorpay",
+  amountPaise: number,
+  extra: {
+    razorpayOrderId?: string;
+    paytm?: { paytmOrderId: string; txnToken: string; redirectUrl: string };
+    alreadyPaid?: boolean;
+  }
+) {
+  return {
+    orderId: order.id,
+    paymentGateway: gateway,
+    razorpayOrderId: extra.razorpayOrderId,
+    amount: amountPaise,
+    currency: "INR",
+    customerName: order.customer_name,
+    customerEmail: order.customer_email,
+    customerPhone: order.customer_phone,
+    statusToken: createOrderStatusToken(
+      order.id,
+      order.paytm_order_id ?? order.razorpay_order_id ?? ""
+    ),
+    paymentMethod: order.payment_method,
+    prepaidAmount: Number(order.prepaid_amount),
+    codAmount: Number(order.cod_amount),
+    discountAmount: Number(order.discount_amount),
+    paytm: extra.paytm,
+    alreadyPaid: extra.alreadyPaid,
+  };
+}
+
+/** Amount (in paise) the customer must pay online now. */
+function chargeablePaise(order: {
+  payment_method: string;
+  total_amount: number;
+  prepaid_amount: number;
+}): number {
+  return rupeesToPaise(
+    order.payment_method === "cod" ? Number(order.prepaid_amount) : Number(order.total_amount)
+  );
+}
+
+/**
+ * Re-initiates payment for an existing pending order (idempotency resume /
+ * retry). Returns a NextResponse JSON.
+ */
+async function resumeCheckout(
+  supabase: Awaited<ReturnType<typeof createServiceClient>>,
+  order: OrderRow,
+  paytmConfig: PaytmConfig | null
+): Promise<NextResponse> {
+  if (order.payment_status === "paid" || order.payment_status === "partially_paid") {
+    return NextResponse.json({
+      success: true,
+      data: checkoutResponseData(order, (paytmConfig ? "paytm" : "razorpay"), chargeablePaise(order), {
+        alreadyPaid: true,
+      }),
+    });
+  }
+
+  // Razorpay fallback — create a fresh Razorpay order for the same charge.
+  if (!paytmConfig) {
+    const razorpayKeyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+    const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
+    if (!razorpayKeyId || !razorpayKeySecret) {
+      return NextResponse.json({ success: false, error: Messages.paymentNotConfigured }, { status: 503 });
+    }
+    const razorpay = new Razorpay({ key_id: razorpayKeyId, key_secret: razorpayKeySecret });
+    try {
+      const razorpayOrder = await razorpay.orders.create({
+        amount: chargeablePaise(order),
+        currency: "INR",
+        receipt: `rcpt_${Date.now()}`,
+        notes: { customer_name: order.customer_name, customer_email: order.customer_email, payment_method: order.payment_method },
+      });
+      const { error } = await supabase
+        .from("orders")
+        .update({ razorpay_order_id: razorpayOrder.id })
+        .eq("id", order.id);
+      if (error) {
+        return NextResponse.json({ success: false, error: Messages.paymentNotConfigured }, { status: 502 });
+      }
+      return NextResponse.json({
+        success: true,
+        data: checkoutResponseData({ ...order, razorpay_order_id: razorpayOrder.id }, "razorpay", chargeablePaise(order), {
+          razorpayOrderId: razorpayOrder.id,
+        }),
+      });
+    } catch {
+      return NextResponse.json({ success: false, error: Messages.paymentNotConfigured }, { status: 502 });
+    }
+  }
+
+  // Paytm — a new attempt uses a fresh Paytm order id (single-use per attempt).
+  const previous = order.paytm_order_id?.match(/-(\d+)$/);
+  const attempt = previous ? Number(previous[1]) + 1 : 2;
+  const paytmOrderId = buildPaytmOrderId(order.id, attempt);
+
+  const initiated = await initiateTransaction(paytmConfig, {
+    paytmOrderId,
+    amountPaise: chargeablePaise(order),
+    customerId: order.customer_email,
+    mobileNumber: order.customer_phone,
+    email: order.customer_email,
+  });
+
+  if (!initiated.success || !initiated.txnToken) {
+    return NextResponse.json(
+      { success: false, error: Messages.paymentNotConfigured, code: initiated.resultCode },
+      { status: 502 }
+    );
+  }
+
+  const { error } = await supabase
+    .from("orders")
+    .update({ paytm_order_id: paytmOrderId })
+    .eq("id", order.id);
+  if (error) {
+    return NextResponse.json({ success: false, error: Messages.paymentNotConfigured }, { status: 502 });
+  }
+
+  return NextResponse.json({
+    success: true,
+    data: checkoutResponseData({ ...order, paytm_order_id: paytmOrderId }, "paytm", chargeablePaise(order), {
+      paytm: {
+        paytmOrderId,
+        txnToken: initiated.txnToken,
+        redirectUrl: getProcessTransactionUrl(paytmConfig, paytmOrderId, initiated.txnToken),
+      },
+    }),
+  });
+}
+
+/**
+ * Atomically claim a reward voucher (AANCHAL-*). Returns null if unusable.
+ */
+async function claimRewardVoucher(
+  supabase: Awaited<ReturnType<typeof createServiceClient>>,
+  code: string,
+  orderId: string
+): Promise<{ ok: true; value: number } | { ok: false; error: string }> {
+  const { data: claimed } = await supabase
+    .from("reward_vouchers")
+    .update({
+      is_used: true,
+      used_by_order_id: orderId,
+    })
+    .eq("code", code)
+    .eq("is_used", false)
+    .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
+    .select("value")
+    .maybeSingle();
+
+  if (!claimed) {
+    return { ok: false, error: "This voucher has already been used or has expired." };
+  }
+  return { ok: true, value: Number(claimed.value) };
+}
+
+/**
+ * Release a voucher claim when order creation fails (order deleted).
+ */
+async function releaseRewardVoucher(
+  supabase: Awaited<ReturnType<typeof createServiceClient>>,
+  code: string | null
+): Promise<void> {
+  if (!code) return;
+  await supabase
+    .from("reward_vouchers")
+    .update({ is_used: false, used_by_order_id: null })
+    .eq("code", code)
+    .eq("is_used", true);
+}
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const data = await validateRequest(request, checkoutSchema);
@@ -28,7 +228,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     measurements,
     payment_method,
     coupon_code,
+    referral_code,
     cartItems: submittedCartItems,
+    idempotency_key,
   } = data;
 
   const cartItems = Array.from(
@@ -51,9 +253,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
+  const paytmConfig = getPaytmConfig();
+  const paymentGateway: "paytm" | "razorpay" = paytmConfig ? "paytm" : "razorpay";
+
   const razorpayKeyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
   const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
-  if (!razorpayKeyId || !razorpayKeySecret) {
+  if (paymentGateway === "razorpay" && (!razorpayKeyId || !razorpayKeySecret)) {
     console.error("[create-order] Payment credentials missing");
     return NextResponse.json(
       { success: false, error: Messages.paymentNotConfigured },
@@ -61,11 +266,26 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const razorpay = new Razorpay({
-    key_id: razorpayKeyId,
-    key_secret: razorpayKeySecret,
-  });
   const supabase = await createServiceClient();
+
+  // ── Idempotency — resume an existing pending order for this key ──
+  if (idempotency_key) {
+    const { data: existing } = await supabase
+      .from("orders")
+      .select(
+        "id, payment_status, payment_method, total_amount, prepaid_amount, cod_amount, discount_amount, customer_name, customer_email, customer_phone, paytm_order_id, razorpay_order_id"
+      )
+      .eq("idempotency_key", idempotency_key)
+      .maybeSingle();
+
+    if (existing) {
+      return resumeCheckout(supabase, existing as OrderRow, paytmConfig);
+    }
+  }
+
+  const razorpay = paymentGateway === "razorpay"
+    ? new Razorpay({ key_id: razorpayKeyId!, key_secret: razorpayKeySecret! })
+    : null;
 
   // ── Fetch products & build order items with server-side prices ──
   const productIds = [...new Set(cartItems.map((i) => i.productId))];
@@ -107,11 +327,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const product = products.find((p) => p.id === cartItem.productId);
     if (!product) {
       return NextResponse.json(
-        {
-          success: false,
-          error: Messages.productUnavailable,
-          code: "PRODUCT_NOT_FOUND",
-        },
+        { success: false, error: Messages.productUnavailable, code: "PRODUCT_NOT_FOUND" },
         { status: 400 },
       );
     }
@@ -130,26 +346,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     let sku: string | null = null;
 
     if (cartItem.variantId) {
-      const variant = activeVariants.find(
-        (v: { id: string }) => v.id === cartItem.variantId,
-      );
+      const variant = activeVariants.find((v: { id: string }) => v.id === cartItem.variantId);
       if (!variant) {
         return NextResponse.json(
-          {
-            success: false,
-            error: "Selected options unavailable",
-            code: "VARIANT_NOT_FOUND",
-          },
+          { success: false, error: "Selected options unavailable", code: "VARIANT_NOT_FOUND" },
           { status: 400 },
         );
       }
       if (variant.stock < cartItem.quantity) {
         return NextResponse.json(
-          {
-            success: false,
-            error: Messages.outOfStock,
-            code: "INSUFFICIENT_STOCK",
-          },
+          { success: false, error: Messages.outOfStock, code: "INSUFFICIENT_STOCK" },
           { status: 409 },
         );
       }
@@ -159,18 +365,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       sku = variant.sku;
     } else if (activeVariants.length > 0) {
       return NextResponse.json(
-        {
-          success: false,
-          error: Messages.variantRequired,
-          code: "VARIANT_REQUIRED",
-        },
+        { success: false, error: Messages.variantRequired, code: "VARIANT_REQUIRED" },
         { status: 400 },
       );
     }
 
     const sortedImages = [...product.product_images].sort(
-      (a: { position: number }, b: { position: number }) =>
-        a.position - b.position,
+      (a: { position: number }, b: { position: number }) => a.position - b.position,
     );
     const lineTotal = unitPrice * cartItem.quantity;
     subtotal += lineTotal;
@@ -191,20 +392,34 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   // ── Shipping ──
-  const shippingFee = subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_FEE;
+  const shippingFee = SHIPPING_FEE;
   const rawTotal = subtotal + shippingFee;
 
-  // ── Coupon discount ──
+  // ── Generate the local order id first — needed for atomic voucher claims ──
+  const orderId = crypto.randomUUID();
+
+  // ── Discounts ──
   let couponDiscount = 0;
   let couponId: string | null = null;
+  let rewardVoucherCode: string | null = null;
+  let influencerCode: string | null = null;
+  let influencerDiscount = 0;
 
-  if (coupon_code) {
+  const normalizedCoupon = coupon_code?.trim().toUpperCase();
+
+  // Reward voucher (AANCHAL-*) — atomic one-time claim bound to this order
+  if (normalizedCoupon?.startsWith("AANCHAL-")) {
+    const claimed = await claimRewardVoucher(supabase, normalizedCoupon, orderId);
+    if (!claimed.ok) {
+      return NextResponse.json({ success: false, error: claimed.error }, { status: 400 });
+    }
+    couponDiscount = Math.min(claimed.value, rawTotal);
+    rewardVoucherCode = normalizedCoupon;
+  } else if (normalizedCoupon) {
     const { data: coupon } = await supabase
       .from("coupons")
-      .select(
-        "id, discount_type, discount_value, max_discount_amount, min_order_amount, is_active, start_date, end_date",
-      )
-      .eq("code", coupon_code.toUpperCase())
+      .select("id, discount_type, discount_value, max_discount_amount, min_order_amount, usage_limit, per_customer_limit, is_active, start_date, end_date")
+      .eq("code", normalizedCoupon)
       .eq("is_active", true)
       .single();
 
@@ -213,22 +428,33 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       const validDates =
         (!coupon.start_date || new Date(coupon.start_date) <= now) &&
         (!coupon.end_date || new Date(coupon.end_date) >= now);
-      const validMinOrder =
-        !coupon.min_order_amount || rawTotal >= coupon.min_order_amount;
+      const validMinOrder = !coupon.min_order_amount || rawTotal >= coupon.min_order_amount;
 
       if (validDates && validMinOrder) {
+        const { count: usageCount } = await supabase
+          .from("coupon_usage")
+          .select("id", { count: "exact", head: true })
+          .eq("coupon_id", coupon.id);
+        const { count: customerCount } = await supabase
+          .from("coupon_usage")
+          .select("id", { count: "exact", head: true })
+          .eq("coupon_id", coupon.id)
+          .eq("customer_email", customer_email);
+
+        if (coupon.usage_limit && usageCount !== null && usageCount >= coupon.usage_limit) {
+          return NextResponse.json({ success: false, error: Messages.couponUsageLimit }, { status: 400 });
+        }
+        if (coupon.per_customer_limit && customerCount !== null && customerCount >= coupon.per_customer_limit) {
+          return NextResponse.json({ success: false, error: Messages.couponAlreadyUsed }, { status: 400 });
+        }
+
         if (coupon.discount_type === "fixed") {
           couponDiscount = coupon.discount_value;
         } else {
-          couponDiscount = Math.round(
-            (rawTotal * coupon.discount_value) / 100,
-          );
+          couponDiscount = Math.round((rawTotal * coupon.discount_value) / 100);
         }
         if (coupon.max_discount_amount) {
-          couponDiscount = Math.min(
-            couponDiscount,
-            coupon.max_discount_amount,
-          );
+          couponDiscount = Math.min(couponDiscount, coupon.max_discount_amount);
         }
         couponDiscount = Math.min(couponDiscount, rawTotal);
         couponId = coupon.id;
@@ -238,6 +464,27 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const totalAfterCoupon = rawTotal - couponDiscount;
 
+  // Influencer referral discount
+  if (referral_code && referral_code.trim()) {
+    const code = referral_code.trim().toUpperCase();
+    const { data: influencer } = await supabase.rpc("get_influencer_by_code", {
+      referral_code_input: code,
+    });
+
+    if (!influencer || influencer.status !== "approved") {
+      await releaseRewardVoucher(supabase, rewardVoucherCode);
+      return NextResponse.json(
+        { success: false, error: "Invalid or inactive referral code.", code: "INVALID_REFERRAL" },
+        { status: 400 },
+      );
+    }
+    influencerDiscount = Math.min(Math.round(totalAfterCoupon * INFLUENCER_COMMISSION_RATE), INFLUENCER_DISCOUNT_CAP);
+    influencerDiscount = Math.min(influencerDiscount, totalAfterCoupon);
+    influencerCode = code;
+  }
+
+  const totalAfterReferral = totalAfterCoupon - influencerDiscount;
+
   // ── Payment-method specific calculations ──
   let totalAmount: number;
   let prepaidAmount: number;
@@ -246,43 +493,68 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   let discountAmount: number;
 
   if (payment_method === "prepaid") {
-    prepaidDiscount = Math.round(totalAfterCoupon * PREPAID_DISCOUNT_RATE);
-    totalAmount = totalAfterCoupon - prepaidDiscount;
-    discountAmount = couponDiscount + prepaidDiscount;
+    prepaidDiscount = Math.round(totalAfterReferral * PREPAID_DISCOUNT_RATE);
+    totalAmount = totalAfterReferral - prepaidDiscount;
+    discountAmount = couponDiscount + influencerDiscount + prepaidDiscount;
     prepaidAmount = totalAmount;
     codAmount = 0;
   } else {
-    totalAmount = totalAfterCoupon;
-    prepaidAmount = Math.ceil(totalAfterCoupon / 2);
-    codAmount = Math.floor(totalAfterCoupon / 2);
+    totalAmount = totalAfterReferral;
+    prepaidAmount = Math.ceil(totalAfterReferral / 2);
+    codAmount = Math.floor(totalAfterReferral / 2);
     prepaidDiscount = 0;
-    discountAmount = couponDiscount;
+    discountAmount = couponDiscount + influencerDiscount;
   }
 
-  // ── Razorpay order (for the upfront portion) ──
-  const razorpayAmount =
-    payment_method === "prepaid" ? totalAmount : prepaidAmount;
+  // ── Generate payment references ──
+  let razorpayOrderId: string | null = null;
+  let paytmOrderId: string | null = null;
 
-  let razorpayOrder: { id: string };
-  try {
-    razorpayOrder = await razorpay.orders.create({
-      amount: rupeesToPaise(razorpayAmount),
-      currency: "INR",
-      receipt: `rcpt_${Date.now()}`,
-      notes: { customer_name, customer_email, payment_method },
-    });
-  } catch (err) {
-    console.error("[create-order] Razorpay order creation failed:", err instanceof Error ? err.message : "unknown");
-    return NextResponse.json(
-      { success: false, error: Messages.paymentNotConfigured },
-      { status: 502 },
-    );
+  const adapter = await getProviderAdapter(paymentGateway);
+  const amountPaiseToCharge = rupeesToPaise(payment_method === "prepaid" ? totalAmount : prepaidAmount);
+
+  if (adapter && adapter.createOrder) {
+    const createRes = await adapter.createOrder({ amountPaise: amountPaiseToCharge, currency: "INR", receipt: orderId, notes: { customer_name, customer_email, payment_method } });
+    if (createRes?.error) {
+      console.error("[create-order] Provider createOrder failed:", createRes.error);
+      await releaseRewardVoucher(supabase, rewardVoucherCode);
+      return NextResponse.json({ success: false, error: Messages.paymentNotConfigured }, { status: 502 });
+    }
+    if (paymentGateway === "razorpay") {
+      razorpayOrderId = createRes.providerOrderId ?? null;
+    } else {
+      // paytm: prefer provider-supplied id, fall back to legacy build
+      paytmOrderId = createRes.providerOrderId ?? buildPaytmOrderId(orderId, 1);
+    }
+  } else {
+    // Fallback to previous inline behavior when adapter doesn't implement createOrder
+    if (paymentGateway === "razorpay") {
+      try {
+        const razorpayOrder = await razorpay!.orders.create({
+          amount: amountPaiseToCharge,
+          currency: "INR",
+          receipt: `rcpt_${Date.now()}`,
+          notes: { customer_name, customer_email, payment_method },
+        });
+        razorpayOrderId = razorpayOrder.id;
+      } catch (err) {
+        console.error("[create-order] Razorpay order creation failed:", err instanceof Error ? err.message : "unknown");
+        await releaseRewardVoucher(supabase, rewardVoucherCode);
+        return NextResponse.json(
+          { success: false, error: Messages.paymentNotConfigured },
+          { status: 502 },
+        );
+      }
+    } else {
+      paytmOrderId = buildPaytmOrderId(orderId, 1);
+    }
   }
 
   // ── Create order row ──
   const { data: order } = await supabase
     .from("orders")
     .insert({
+      id: orderId,
       customer_name,
       customer_email,
       customer_phone,
@@ -299,15 +571,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       prepaid_amount: prepaidAmount,
       cod_amount: codAmount,
       payment_method,
+      payment_provider: paymentGateway,
       coupon_id: couponId,
+      reward_voucher_code: rewardVoucherCode,
+      influencer_code: influencerCode,
       payment_status: "pending",
       order_status: "pending",
-      razorpay_order_id: razorpayOrder.id,
+      idempotency_key: idempotency_key ?? null,
+      razorpay_order_id: razorpayOrderId,
+      paytm_order_id: paytmOrderId,
     })
     .select("id")
     .single();
 
   if (!order) {
+    await releaseRewardVoucher(supabase, rewardVoucherCode);
     return NextResponse.json(
       { success: false, error: Messages.orderCreateError },
       { status: 500 },
@@ -317,75 +595,117 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // ── Insert order items ──
   const { error: itemsError } = await supabase
     .from("order_items")
-    .insert(
-      orderItemsPayload.map((item) => ({ ...item, order_id: order.id })),
-    );
+    .insert(orderItemsPayload.map((item) => ({ ...item, order_id: order.id })));
 
   if (itemsError) {
     console.error("[create-order] Items insert error:", itemsError.message);
     await supabase.from("orders").delete().eq("id", order.id);
+    await releaseRewardVoucher(supabase, rewardVoucherCode);
     return NextResponse.json(
       { success: false, error: Messages.orderCreateError },
       { status: 500 },
     );
   }
 
-  // ── Store measurements (non-critical, don't fail order) ──
-  try {
-    await supabase.from("order_measurements").insert({
+  // ── Store measurements, coupon usage & status history (non-critical) ──
+  await Promise.allSettled([
+    supabase.from("order_measurements").insert({
       order_id: order.id,
       chest: measurements.chest,
       waist: measurements.waist,
       full_height: measurements.full_height,
+      shoulder: measurements.shoulder,
       unit: measurements.unit,
       personalisation_request: measurements.personalisation_request ?? null,
-    });
-  } catch (e) {
-    console.warn("[create-order] Failed to store measurements:", e instanceof Error ? e.message : "unknown");
-  }
-
-  // ── Record coupon usage (non-critical) ──
-  if (couponId) {
-    try {
-      await supabase.from("coupon_usage").insert({
-        coupon_id: couponId,
-        order_id: order.id,
-        customer_email: customer_email,
-        discount_amount: couponDiscount,
-      });
-    } catch (e) {
-      console.warn("[create-order] Failed to record coupon usage:", e instanceof Error ? e.message : "unknown");
-    }
-  }
-
-  // ── Seed order status history (non-critical) ──
-  try {
-    await supabase.from("order_status_history").insert({
+    }),
+    couponId
+      ? supabase.from("coupon_usage").insert({
+          coupon_id: couponId,
+          order_id: order.id,
+          customer_email: customer_email,
+          discount_amount: couponDiscount,
+        })
+      : Promise.resolve(),
+    supabase.from("order_status_history").insert({
       order_id: order.id,
       old_status: null,
       new_status: "pending",
       changed_by: "system",
       notes: "Order placed",
+    }),
+  ]);
+
+  // ── Initiate payment after the order exists ──
+  if (paymentGateway === "paytm") {
+    const initiated = await initiateTransaction(paytmConfig!, {
+      paytmOrderId: paytmOrderId!,
+      amountPaise: rupeesToPaise(payment_method === "prepaid" ? totalAmount : prepaidAmount),
+      customerId: customer_email,
+      mobileNumber: customer_phone,
+      email: customer_email,
     });
-  } catch (e) {
-    console.warn("[create-order] Failed to seed status history:", e instanceof Error ? e.message : "unknown");
+
+    if (!initiated.success || !initiated.txnToken) {
+      console.error("[create-order] Paytm initiate failed:", initiated.resultCode, initiated.resultMsg);
+      await supabase.from("orders").delete().eq("id", order.id);
+      // Clean up the coupon usage row created above so failed orders do not
+      // count toward coupon usage limits.
+      if (couponId) {
+        await supabase.from("coupon_usage").delete().eq("order_id", order.id);
+      }
+      await releaseRewardVoucher(supabase, rewardVoucherCode);
+      return NextResponse.json(
+        { success: false, error: Messages.paymentNotConfigured, code: initiated.resultCode },
+        { status: 502 },
+      );
+    }
+
+    const finalOrder: OrderRow = {
+      id: order.id,
+      payment_status: "pending",
+      payment_method,
+      total_amount: totalAmount,
+      prepaid_amount: prepaidAmount,
+      cod_amount: codAmount,
+      discount_amount: discountAmount,
+      customer_name,
+      customer_email,
+      customer_phone,
+      paytm_order_id: paytmOrderId,
+      razorpay_order_id: null,
+    };
+
+    return NextResponse.json({
+      success: true,
+      data: checkoutResponseData(finalOrder, "paytm", rupeesToPaise(payment_method === "prepaid" ? totalAmount : prepaidAmount), {
+        paytm: {
+          paytmOrderId: paytmOrderId!,
+          txnToken: initiated.txnToken,
+          redirectUrl: getProcessTransactionUrl(paytmConfig!, paytmOrderId!, initiated.txnToken),
+        },
+      }),
+    });
   }
+
+  const finalOrder: OrderRow = {
+    id: order.id,
+    payment_status: "pending",
+    payment_method,
+    total_amount: totalAmount,
+    prepaid_amount: prepaidAmount,
+    cod_amount: codAmount,
+    discount_amount: discountAmount,
+    customer_name,
+    customer_email,
+    customer_phone,
+    paytm_order_id: null,
+    razorpay_order_id: razorpayOrderId,
+  };
 
   return NextResponse.json({
     success: true,
-    data: {
-      orderId: order.id,
-      razorpayOrderId: razorpayOrder.id,
-      amount: rupeesToPaise(razorpayAmount),
-      currency: "INR",
-      customerName: customer_name,
-      customerEmail: customer_email,
-      customerPhone: customer_phone,
-      statusToken: createOrderStatusToken(order.id, razorpayOrder.id),
-      paymentMethod: payment_method,
-      prepaidAmount,
-      codAmount,
-      discountAmount,
-    },
+    data: checkoutResponseData(finalOrder, "razorpay", rupeesToPaise(payment_method === "prepaid" ? totalAmount : prepaidAmount), {
+      razorpayOrderId: razorpayOrderId!,
+    }),
   });
 }

@@ -26,6 +26,11 @@ const MEASUREMENT_GUIDE = [
     instruction:
       "Stand straight against a wall. Measure from the top of your head to the floor.",
   },
+  {
+    label: "Shoulder",
+    instruction:
+      "Measure straight across your back from the edge of one shoulder to the other.",
+  },
 ];
 
 export default function MeasurementForm({
@@ -53,7 +58,7 @@ export default function MeasurementForm({
         your custom-fit outfit.
       </p>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* Chest */}
         <div>
           <label
@@ -142,6 +147,38 @@ export default function MeasurementForm({
           {errors?.full_height && (
             <p id="error-full_height" className="mt-1 text-xs text-[#C41E3A]">
               {errors.full_height}
+            </p>
+          )}
+        </div>
+
+        {/* Shoulder */}
+        <div>
+          <label
+            htmlFor="measurement-shoulder"
+            className="block text-xs font-medium text-[#1C1C1C] mb-1"
+          >
+            Shoulder (cm) *
+          </label>
+          <input
+            id="measurement-shoulder"
+            type="number"
+            min={25}
+            max={70}
+            step={0.1}
+            value={value.shoulder || ""}
+            onChange={(e) =>
+              update("shoulder", parseFloat(e.target.value) || 0)
+            }
+            aria-invalid={!!errors?.shoulder}
+            aria-describedby={errors?.shoulder ? "error-shoulder" : undefined}
+            className={`w-full rounded border bg-white px-3 py-2 text-sm text-[#1C1C1C] placeholder:text-[#6B6B6B]/80 focus:outline-none focus:ring-2 focus:ring-[#800020] ${
+              errors?.shoulder ? "border-[#C41E3A]" : "border-[#E5D5C5]"
+            }`}
+            placeholder="e.g. 40.0"
+          />
+          {errors?.shoulder && (
+            <p id="error-shoulder" className="mt-1 text-xs text-[#C41E3A]">
+              {errors.shoulder}
             </p>
           )}
         </div>

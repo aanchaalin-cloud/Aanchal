@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
+import { hmacHex, timingSafeEqualHex } from "@/lib/crypto";
 import { createServiceClient } from "@/lib/supabase/server";
 import { Messages } from "@/lib/messages";
+import { createInfluencerEarnings } from "@/lib/orders/influencer-earnings";
+import { decrementStockForItems, incrementStockForItems } from "@/lib/stock";
+import { info, warn, error as logError } from "@/lib/logger";
 
 /**
  * Razorpay webhook handler.
@@ -14,9 +18,11 @@ import { Messages } from "@/lib/messages";
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
+    const traceId = request.headers.get("x-request-id") ?? crypto.randomUUID();
+
     const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
     if (!webhookSecret) {
-      console.error("[webhook] RAZORPAY_WEBHOOK_SECRET not configured");
+      logError("RAZORPAY_WEBHOOK_SECRET not configured", { traceId });
       return NextResponse.json(
         { error: "Webhook not configured" },
         { status: 503 }
@@ -28,7 +34,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const signature = request.headers.get("x-razorpay-signature");
 
     if (!signature) {
-      console.warn("[webhook] Missing signature header");
+      warn("Missing signature header", { traceId });
       return NextResponse.json(
         { error: "Missing signature" },
         { status: 400 }
@@ -36,15 +42,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     // 2. Verify webhook signature
-    const expectedSignature = crypto
-      .createHmac("sha256", webhookSecret)
-      .update(rawBody)
-      .digest("hex");
-
-    const expectedBuf = Buffer.from(expectedSignature, "hex");
-    const providedBuf = Buffer.from(signature, "hex");
-    if (expectedBuf.length !== providedBuf.length || !crypto.timingSafeEqual(expectedBuf, providedBuf)) {
-      console.warn("[webhook] Signature mismatch");
+    const expectedSignature = hmacHex(webhookSecret, rawBody, "sha256");
+    if (!timingSafeEqualHex(expectedSignature, signature)) {
+      warn("Signature mismatch", { traceId });
       return NextResponse.json(
         { error: "Invalid signature" },
         { status: 400 }
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const payment = event.payload?.payment?.entity;
     if (!payment?.order_id || !payment?.id) {
-      console.warn("[webhook] Incomplete payment.captured payload");
+      warn("Incomplete payment.captured payload", { traceId });
       return NextResponse.json(
         { error: "Incomplete payload" },
         { status: 400 }
@@ -81,10 +81,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       .single();
 
     if (orderError || !order) {
-      console.warn(
-        "[webhook] No local order found for Razorpay order: %s",
-        razorpayOrderId
-      );
+      warn("No local order found for Razorpay order", { traceId, razorpayOrderId, error: orderError?.message });
       return NextResponse.json(
         { error: "Order not found" },
         { status: 404 }
@@ -102,45 +99,25 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       quantity: number;
     }>;
 
-    const stockItems = orderItems.filter((item) => item.variant_id);
+    const stockItems = orderItems.filter((item): item is { variant_id: string; quantity: number } => Boolean(item.variant_id));
 
-    const stockResults = await Promise.all(
-      stockItems.map(async (item) => {
-        const { data: rpcResult, error: rpcError } = await supabase.rpc(
-          "decrement_variant_stock",
-          { p_variant_id: item.variant_id!, p_quantity: item.quantity }
-        );
-        const result = Array.isArray(rpcResult) && rpcResult.length > 0
-          ? (rpcResult[0] as { success: boolean; message: string })
-          : null;
-        return {
-          variantId: item.variant_id!,
-          quantity: item.quantity,
-          success: result?.success ?? false,
-          error: rpcError?.message ?? result?.message ?? "Stock update failed",
-        };
-      })
-    );
+    const stockResults = await decrementStockForItems(supabase, stockItems);
 
     const failedStock = stockResults.filter((r) => !r.success);
 
     // 7. Roll back on failure
     if (failedStock.length > 0) {
       const succeeded = stockResults.filter((r) => r.success);
-      await Promise.all(
-        succeeded.map(async (r) => {
-          await supabase.rpc("increment_variant_stock", {
-            p_variant_id: r.variantId,
-            p_quantity: r.quantity,
-          });
-        })
+      await incrementStockForItems(
+        supabase,
+        succeeded.map((r) => ({ variantId: r.variantId, quantity: r.quantity }))
       );
 
-      console.error(
-        "[webhook] Stock decrement failed for order %s: %s",
-        order.id,
-        failedStock.map((f) => f.error).join(", ")
-      );
+      logError("Stock decrement failed for order", {
+        traceId,
+        orderId: order.id,
+        errors: failedStock.map((f) => f.error),
+      });
 
       return NextResponse.json(
         { error: Messages.genericError },
@@ -153,27 +130,26 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       .from("orders")
       .update({
         payment_status: "paid",
-        order_status: "paid",
+        order_status: "confirmed",
         razorpay_payment_id: razorpayPaymentId,
       })
       .eq("id", order.id)
       .eq("payment_status", "pending");
 
     if (updateError) {
-      console.error(
-        "[webhook] Failed to update order %s: %s",
-        order.id,
-        updateError.message
-      );
+      logError("Failed to update order", { traceId, orderId: order.id, error: updateError.message });
       return NextResponse.json(
         { error: "Failed to update order" },
         { status: 500 }
       );
     }
 
+    await createInfluencerEarnings(order.id);
+
+    info("Webhook processed successfully", { traceId, orderId: order.id, razorpayOrderId, razorpayPaymentId });
     return NextResponse.json({ status: "processed" });
   } catch (error) {
-    console.error("[webhook] Unexpected error:", error instanceof Error ? error.message : "unknown");
+    logError("Unexpected webhook error", { traceId: request ? undefined : undefined, error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json(
       { error: Messages.genericError },
       { status: 500 }

@@ -5,6 +5,9 @@ import { getPublicOrderStatus } from "@/lib/orders/public-status";
 import { formatDate, formatPrice, getOrderStatusLabel } from "@/lib/utils";
 import { Messages } from "@/lib/messages";
 import { StorefrontEmptyState } from "@/components/ui/StorefrontState";
+import PaymentStatusRefresher from "@/components/checkout/PaymentStatusRefresher";
+import OrderRetryButton from "@/components/checkout/OrderRetryButton";
+import CancelOrderButton from "@/components/checkout/CancelOrderButton";
 
 export const metadata: Metadata = {
   title: "Order Status",
@@ -12,17 +15,17 @@ export const metadata: Metadata = {
 };
 
 type Props = {
-  searchParams: Promise<{ orderId?: string; statusToken?: string }>;
+  searchParams: Promise<{ orderId?: string; statusToken?: string; refresh?: string }>;
 };
 
 export default async function OrderSuccessPage({ searchParams }: Props) {
-  const { orderId, statusToken } = await searchParams;
+  const { orderId, statusToken, refresh } = await searchParams;
   const validRequest =
     typeof orderId === "string" &&
     /^[0-9a-f-]{36}$/i.test(orderId) &&
     typeof statusToken === "string";
   const order = validRequest
-    ? await getPublicOrderStatus(orderId, statusToken)
+    ? await getPublicOrderStatus(orderId!, statusToken!)
     : null;
 
   if (!order) {
@@ -40,6 +43,13 @@ export default async function OrderSuccessPage({ searchParams }: Props) {
   const isPaid = order.payment_status === "paid";
   const isFailed = order.payment_status === "failed";
   const isRefunded = order.payment_status === "refunded";
+
+  const cancellable =
+    !["delivered", "cancelled", "return_requested", "returned", "refunded"].includes(
+      order.order_status
+    );
+  const dispatched =
+    order.order_status === "shipped" || order.order_status === "out_for_delivery";
 
   let StatusIcon = Clock;
   let title = "Payment Pending";
@@ -78,9 +88,9 @@ export default async function OrderSuccessPage({ searchParams }: Props) {
 
       <dl className="mt-8 grid grid-cols-1 gap-3 rounded-sm border border-[#E5D5C5]/50 bg-white p-5 text-left text-sm sm:grid-cols-2">
         <div>
-          <dt className="text-[#6B6B6B]">Order ID</dt>
-          <dd className="break-all font-mono text-xs text-[#1C1C1C]">
-            {order.id}
+          <dt className="text-[#6B6B6B]">Order Number</dt>
+          <dd className="font-mono font-medium text-[#1C1C1C]">
+            {order.order_number ?? order.id}
           </dd>
         </div>
         <div>
@@ -117,13 +127,11 @@ export default async function OrderSuccessPage({ searchParams }: Props) {
             <ArrowRight className="h-4 w-4" />
           </Link>
         ) : (
-          <Link
-            href="/checkout"
-            className="inline-flex items-center gap-2 rounded bg-[#800020] px-6 py-3 text-sm font-medium text-white hover:bg-[#66001A] transition-colors"
-          >
-            Try Again
-            <ArrowRight className="h-4 w-4" />
-          </Link>
+          <OrderRetryButton
+            orderId={order.id}
+            statusToken={statusToken!}
+            paymentProvider={order.payment_provider}
+          />
         )}
         <a
           href="mailto:hello@aanchal.in"
@@ -132,6 +140,21 @@ export default async function OrderSuccessPage({ searchParams }: Props) {
           Contact Support
         </a>
       </div>
+
+      {cancellable && (
+        <div className="mt-8">
+          <CancelOrderButton orderId={order.id} statusToken={statusToken!} dispatched={dispatched} />
+        </div>
+      )}
+
+      {order.payment_provider === "paytm" && order.paytm_order_id && (
+        <PaymentStatusRefresher
+          orderId={order.id}
+          paytmOrderId={order.paytm_order_id}
+          paymentStatus={order.payment_status}
+          refreshParam={refresh}
+        />
+      )}
     </div>
   );
 }

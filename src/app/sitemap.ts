@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { getActiveProducts } from "@/lib/queries/products";
+import { getActiveProductSitemapEntries } from "@/lib/queries/products";
 
 const BASE_URL =
   process.env.NEXT_PUBLIC_BASE_URL ?? "https://aanchal.in";
@@ -18,7 +18,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   let productEntries: MetadataRoute.Sitemap = [];
 
   try {
-    const products = await getActiveProducts();
+    const products = await getActiveProductSitemapEntries();
     productEntries = products.map((p) => ({
       url: `${BASE_URL}/products/${p.slug}`,
       lastModified: new Date(p.updated_at ?? p.created_at),

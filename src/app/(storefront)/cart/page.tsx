@@ -108,7 +108,7 @@ export default function CartPage() {
                     {formatPrice(item.display_price)}
                   </p>
 
-                  <div className="flex items-center justify-between mt-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 mt-2">
                     <div className="flex items-center border border-[#E5D5C5] rounded">
                       <button
                         onClick={() =>
@@ -118,12 +118,12 @@ export default function CartPage() {
                             item.quantity - 1
                           )
                         }
-                        className="flex h-7 w-8 items-center justify-center text-[#6B6B6B] hover:bg-[#FFF0E8] transition-colors"
+                        className="flex h-9 w-9 items-center justify-center text-[#6B6B6B] hover:bg-[#FFF0E8] transition-colors"
                         aria-label="Decrease quantity"
                       >
-                        <Minus className="h-3 w-3" />
+                        <Minus className="h-3.5 w-3.5" />
                       </button>
-                      <span className="w-8 text-center text-sm text-[#1C1C1C]">
+                      <span className="w-9 text-center text-sm text-[#1C1C1C]">
                         {item.quantity}
                       </span>
                       <button
@@ -137,10 +137,10 @@ export default function CartPage() {
                         disabled={
                           item.quantity >= Math.min(item.available_stock, 10)
                         }
-                        className="flex h-7 w-8 items-center justify-center text-[#6B6B6B] hover:bg-[#FFF0E8] transition-colors disabled:opacity-30"
+                        className="flex h-9 w-9 items-center justify-center text-[#6B6B6B] hover:bg-[#FFF0E8] transition-colors disabled:opacity-30"
                         aria-label="Increase quantity"
                       >
-                        <Plus className="h-3 w-3" />
+                        <Plus className="h-3.5 w-3.5" />
                       </button>
                     </div>
 
@@ -152,7 +152,7 @@ export default function CartPage() {
                         onClick={() =>
                           removeItem(item.product_id, item.variant_id)
                         }
-                        className="text-[#6B6B6B] hover:text-[#C41E3A] transition-colors"
+                        className="p-1.5 text-[#6B6B6B] hover:text-[#C41E3A] transition-colors"
                         aria-label={`Remove ${item.product_name} from cart`}
                       >
                         <Trash2 className="h-4 w-4" />
@@ -187,7 +187,7 @@ export default function CartPage() {
             </div>
 
             <p className="mt-3 text-xs text-[#6B6B6B]">
-              Final price verified at checkout. Free shipping on orders above ₹999.
+              Final price verified at checkout. Standard shipping applies on all orders.
             </p>
 
             <div className="mt-5">

@@ -3,6 +3,9 @@ import Link from "next/link";
 const NAV_LINKS = [
   { label: "Home", href: "/" },
   { label: "Shop", href: "/shop" },
+  { label: "Track Order", href: "/track-order" },
+  { label: "Influencer Program", href: "/influencer" },
+  { label: "My Account", href: "/account" },
   { label: "Contact", href: "/contact" },
 ];
 

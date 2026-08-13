@@ -39,7 +39,8 @@ export default async function AdminProductsPage() {
         </div>
       ) : (
         <div className="overflow-x-auto rounded-sm border border-stone-200 bg-white">
-          <table className="min-w-full divide-y divide-stone-100">
+                  <div className="min-w-full">
+                  <table className="w-full divide-y divide-stone-100">
             <thead>
               <tr className="bg-stone-50">
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-stone-600">Product</th>
@@ -132,6 +133,7 @@ export default async function AdminProductsPage() {
             </tbody>
           </table>
         </div>
+      </div>
       )}
     </div>
   );

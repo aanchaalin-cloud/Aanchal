@@ -1,0 +1,24 @@
+
+> indian-clothing-brand@0.1.0 dev
+> next dev -p 3002
+
+   ▲ Next.js 15.5.19
+   - Local:        http://localhost:3002
+   - Network:      http://192.168.33.1:3002
+   - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 4.5s
+ ○ Compiling /middleware ...
+ ✓ Compiled /middleware in 1992ms (170 modules)
+ ○ Compiling / ...
+<w> [webpack.cache.PackFileCacheStrategy] Serializing big strings (102kiB) impacts deserialization performance (consider using Buffer instead and decode when needed)
+<w> [webpack.cache.PackFileCacheStrategy] Serializing big strings (250kiB) impacts deserialization performance (consider using Buffer instead and decode when needed)
+ ✓ Compiled / in 15.7s (1075 modules)
+ GET / 200 in 21402ms
+ ○ Compiling /shop ...
+ ✓ Compiled /shop in 5s (1074 modules)
+ GET /shop 200 in 8077ms
+ ○ Compiling /cart ...
+ ✓ Compiled /cart in 1299ms (1070 modules)
+ GET /cart 200 in 2384ms

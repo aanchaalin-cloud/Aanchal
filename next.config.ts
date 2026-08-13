@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 
+const isDev = process.env.NODE_ENV !== "production";
+
 const nextConfig: NextConfig = {
   outputFileTracingRoot: __dirname,
   productionBrowserSourceMaps: false,
@@ -38,7 +40,8 @@ const nextConfig: NextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' https://checkout.razorpay.com 'unsafe-inline'",
+              "script-src 'self' https://checkout.razorpay.com 'unsafe-inline'" +
+                (isDev ? " 'unsafe-eval'" : ""),
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' https://*.supabase.co data: blob:",
               "font-src 'self' https://fonts.gstatic.com",

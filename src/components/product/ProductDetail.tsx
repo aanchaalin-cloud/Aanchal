@@ -1,36 +1,50 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Minus, Plus, ShoppingBag, Shield, Truck, RotateCcw,
-  X, Ruler, Check, AlertTriangle
+  Ruler, Check, AlertTriangle
 } from "lucide-react";
-import type { ProductWithDetails } from "@/types";
+import type { ProductWithDetails, ProductReview } from "@/types";
 import { useCart } from "@/context/CartContext";
+import { useAuth } from "@/context/AuthContext";
+import { useRecentViews } from "@/context/RecentViewsContext";
 import { ProductCard } from "@/components/product/ProductCard";
 import { ProductReviews } from "@/components/product/ProductReviews";
+import { ProductRating } from "@/components/product/ProductRating";
 import { ReviewForm } from "@/components/product/ReviewForm";
+import { WishlistButton } from "@/components/product/WishlistButton";
+import { RecentlyViewed } from "@/components/product/RecentlyViewed";
 
 interface ProductDetailProps {
   product: ProductWithDetails;
   relatedProducts?: ProductWithDetails[];
 }
 
-const SIZE_GUIDE_DATA = [
-  { size: "XS", bust: "30-31", waist: "24-25", hip: "33-34", length: "Approx. 42" },
-  { size: "S", bust: "32-33", waist: "26-27", hip: "35-36", length: "Approx. 42" },
-  { size: "M", bust: "34-35", waist: "28-29", hip: "37-38", length: "Approx. 43" },
-  { size: "L", bust: "36-37", waist: "30-31", hip: "39-40", length: "Approx. 43" },
-  { size: "XL", bust: "38-40", waist: "32-34", hip: "41-43", length: "Approx. 44" },
-  { size: "XXL", bust: "41-43", waist: "35-37", hip: "44-46", length: "Approx. 44" },
-];
-
 export function ProductDetail({ product, relatedProducts = [] }: ProductDetailProps) {
   const { addItem } = useCart();
+  const { user } = useAuth();
+  const { recordView } = useRecentViews();
   const router = useRouter();
+  const historyLoggedRef = useRef(false);
+
+  useEffect(() => {
+    recordView(product.slug);
+
+    if (user && !historyLoggedRef.current) {
+      historyLoggedRef.current = true;
+      fetch("/api/products/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId: product.id }),
+      }).catch(() => {
+        historyLoggedRef.current = false;
+      });
+    }
+  }, [product.id, product.slug, user, recordView]);
 
   const images = product.product_images?.length
     ? product.product_images
@@ -39,8 +53,23 @@ export function ProductDetail({ product, relatedProducts = [] }: ProductDetailPr
   const [selectedImage, setSelectedImage] = useState(0);
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
-  const [showSizeGuide, setShowSizeGuide] = useState(false);
   const [addedToCart, setAddedToCart] = useState(false);
+
+  const [reviews, setReviews] = useState<ProductReview[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/reviews/product/${product.id}`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (!cancelled && json.success && Array.isArray(json.data)) {
+          setReviews(json.data);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [product.id]);
 
   const activeVariants = product.product_variants?.filter((v) => v.is_active) ?? [];
   const selectedVariant = activeVariants.find((v) => v.id === selectedVariantId) ?? null;
@@ -51,8 +80,6 @@ export function ProductDetail({ product, relatedProducts = [] }: ProductDetailPr
 
   const category = product.category;
   const uniqueColors = [...new Set(activeVariants.map((v) => v.color).filter(Boolean))];
-  const uniqueSizes = [...new Set(activeVariants.map((v) => v.size).filter(Boolean))];
-  const isLowStock = selectedVariant ? selectedVariant.stock > 0 && selectedVariant.stock <= 3 : false;
 
   const addToCart = () => {
     const variant = selectedVariant || activeVariants[0];
@@ -141,6 +168,10 @@ export function ProductDetail({ product, relatedProducts = [] }: ProductDetailPr
                   {discountPercent}% OFF
                 </span>
               )}
+              <WishlistButton
+                productId={product.id}
+                className="absolute top-3 right-3"
+              />
               {allOutOfStock && (
                 <div className="absolute inset-0 flex items-center justify-center bg-[#1C1C1C]/40">
                   <span className="text-sm font-semibold uppercase tracking-wider text-white">
@@ -188,14 +219,17 @@ export function ProductDetail({ product, relatedProducts = [] }: ProductDetailPr
               {product.name}
             </h1>
 
-            <div className="mt-4 flex items-baseline gap-3">
+            <ProductRating reviews={reviews} />
+
+            <div className="mt-4 flex flex-wrap items-baseline gap-3">
               {product.discount_price ? (
                 <>
                   <span className="text-2xl font-semibold text-[#C41E3A]">
                     ₹{product.discount_price.toLocaleString("en-IN")}
                   </span>
-                  <span className="text-lg text-[#6B6B6B] line-through">
-                    ₹{product.price.toLocaleString("en-IN")}
+                  <span className="text-base text-[#6B6B6B]">
+                    <span className="mr-1 text-xs">MRP</span>
+                    <span className="line-through">₹{product.price.toLocaleString("en-IN")}</span>
                   </span>
                   <span className="rounded bg-[#C41E3A]/10 px-2 py-0.5 text-xs font-semibold text-[#C41E3A]">
                     {discountPercent}% off
@@ -216,7 +250,7 @@ export function ProductDetail({ product, relatedProducts = [] }: ProductDetailPr
             )}
 
             {product.description && (
-              <p className="mt-6 text-sm leading-relaxed text-[#6B6B6B]">
+              <p className="mt-6 text-sm leading-relaxed text-[#6B6B6B] whitespace-pre-wrap">
                 {product.description}
               </p>
             )}
@@ -265,71 +299,24 @@ export function ProductDetail({ product, relatedProducts = [] }: ProductDetailPr
                 </div>
               )}
 
-              {/* Size selector */}
-              {uniqueSizes.length > 0 && (
-                <div>
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-[#6B6B6B]">
-                      Size
-                      {selectedVariant?.size && (
-                        <span className="ml-1 lowercase normal-case text-[#1C1C1C]">— {selectedVariant.size}</span>
-                      )}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setShowSizeGuide(true)}
-                      className="flex items-center gap-1 text-xs text-[#800020] hover:underline focus:outline-none focus:ring-2 focus:ring-[#800020] rounded"
-                      aria-label="Open size guide"
-                    >
+              {/* Custom Fit panel — every outfit is made to measure */}
+              <div>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-[#6B6B6B]">
+                    Fit
+                    <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-[#FFF0E8] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#95271D]">
                       <Ruler className="h-3 w-3" />
-                      Size Guide
-                    </button>
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-2" role="radiogroup" aria-label="Size selection">
-                    {uniqueSizes.map((size) => {
-                      const variant = activeVariants.find(
-                        (v) => v.size === size && (!selectedVariant?.color || v.color === selectedVariant.color)
-                      );
-                      const isDisabled = !variant || variant.stock <= 0;
-                      return (
-                        <button
-                          key={size}
-                          type="button"
-                          onClick={() => {
-                            if (!isDisabled && variant) {
-                              handleVariantSelect(variant.id);
-                            }
-                          }}
-                          disabled={isDisabled}
-                          role="radio"
-                          aria-checked={selectedVariant?.size === size}
-                          aria-label={`Size ${size}${isDisabled ? " (sold out)" : ""}`}
-                          className={`relative flex h-10 w-10 items-center justify-center rounded-sm border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-[#800020] ${
-                            isDisabled
-                              ? "border-[#E5D5C5] text-[#BDBDBD] cursor-not-allowed line-through"
-                              : selectedVariant?.size === size
-                              ? "border-[#800020] bg-[#800020] text-white"
-                              : "border-[#E5D5C5] text-[#1C1C1C] hover:border-[#800020]"
-                          }`}
-                        >
-                          {size}
-                          {isDisabled && <span className="sr-only"> (sold out)</span>}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {isLowStock && selectedVariant && (
-                    <p className="mt-1.5 flex items-center gap-1 text-xs text-[#C41E3A]">
-                      <AlertTriangle className="h-3 w-3" />
-                      Only {selectedVariant.stock} left in stock
-                    </p>
-                  )}
+                      Custom Fit
+                    </span>
+                  </p>
                 </div>
-              )}
-
-              {!selectedVariantId && uniqueSizes.length > 0 && !allOutOfStock && (
-                <p className="text-xs text-[#6B6B6B]">Please select a size to continue.</p>
-              )}
+                <p className="mt-2 text-xs leading-relaxed text-[#6B6B6B]">
+                  Every outfit is stitched to your exact measurements — no S/M/L sizes.
+                  You&apos;ll enter your <span className="font-medium text-[#1C1C1C]">chest, waist, height and shoulder</span>{" "}
+                  measurements at checkout. Our team also confirms the details with you
+                  before production begins.
+                </p>
+              </div>
             </div>
 
             {/* Quantity + Actions */}
@@ -361,7 +348,7 @@ export function ProductDetail({ product, relatedProducts = [] }: ProductDetailPr
                 <button
                   type="button"
                   onClick={addToCart}
-                  disabled={allOutOfStock || (!selectedVariantId && uniqueSizes.length > 0)}
+                  disabled={allOutOfStock}
                   className="flex flex-1 items-center justify-center gap-2 rounded-sm bg-[#800020] px-6 py-3 text-sm font-medium text-white hover:bg-[#66001A] transition-colors disabled:bg-[#BDBDBD] disabled:cursor-not-allowed"
                   aria-label={addedToCart ? "Added to cart" : "Add to cart"}
                 >
@@ -374,7 +361,6 @@ export function ProductDetail({ product, relatedProducts = [] }: ProductDetailPr
                 <button
                   type="button"
                   onClick={buyNow}
-                  disabled={!selectedVariantId && uniqueSizes.length > 0}
                   className="w-full rounded-sm border border-[#800020] px-6 py-3 text-sm font-medium text-[#800020] hover:bg-[#FFF0E8] transition-colors disabled:border-[#BDBDBD] disabled:text-[#BDBDBD] disabled:cursor-not-allowed"
                 >
                   Buy Now
@@ -394,15 +380,15 @@ export function ProductDetail({ product, relatedProducts = [] }: ProductDetailPr
               <div className="flex items-start gap-3">
                 <Truck className="mt-0.5 h-4 w-4 text-[#800020]" />
                 <div>
-                  <p className="text-sm font-medium text-[#1C1C1C]">Free Shipping</p>
-                  <p className="text-xs text-[#6B6B6B]">On orders above ₹999. Shipped across India.</p>
+                  <p className="text-sm font-medium text-[#1C1C1C]">Ships Across India</p>
+                  <p className="text-xs text-[#6B6B6B]">Fast, reliable delivery to your doorstep</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
                 <RotateCcw className="mt-0.5 h-4 w-4 text-[#800020]" />
                 <div>
-                  <p className="text-sm font-medium text-[#1C1C1C]">Easy Returns</p>
-                  <p className="text-xs text-[#6B6B6B]">Exchange or return within 7 days of delivery</p>
+                  <p className="text-sm font-medium text-[#1C1C1C]">Easy Exchange</p>
+                  <p className="text-xs text-[#6B6B6B]">Swap to a different product within 3 days of delivery (₹99 fee)</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
@@ -431,10 +417,10 @@ export function ProductDetail({ product, relatedProducts = [] }: ProductDetailPr
       </div>
 
       {/* Reviews */}
-      <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 border-t border-[#E5D5C5]/30">
+      <section id="customer-reviews" className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 border-t border-[#E5D5C5]/30">
         <h2 className="text-2xl font-semibold text-[#1C1C1C] mb-8">Customer Reviews</h2>
         <div className="grid grid-cols-1 gap-10 lg:grid-cols-2">
-          <ProductReviews productId={product.id} />
+          <ProductReviews reviews={reviews} />
           <div className="bg-white rounded-sm border border-[#E5D5C5]/50 p-6">
             <h3 className="text-sm font-semibold uppercase tracking-widest text-[#1C1C1C] mb-4">Write a Review</h3>
             <ReviewForm productId={product.id} productName={product.name} />
@@ -448,7 +434,7 @@ export function ProductDetail({ product, relatedProducts = [] }: ProductDetailPr
           <h2 className="text-2xl font-semibold text-[#1C1C1C] mb-8">
             You May Also Like
           </h2>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 max-[360px]:grid-cols-1">
             {relatedProducts.map((rp) => (
               <ProductCard key={rp.id} product={rp} />
             ))}
@@ -456,72 +442,10 @@ export function ProductDetail({ product, relatedProducts = [] }: ProductDetailPr
         </section>
       )}
 
-      {/* Size Guide Modal */}
-      {showSizeGuide && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-[#1C1C1C]/50 p-4"
-          onClick={() => setShowSizeGuide(false)}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Size guide"
-        >
-          <div
-            className="w-full max-w-lg rounded-sm bg-white p-6 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-[#1C1C1C]">Size Guide</h3>
-              <button
-                type="button"
-                onClick={() => setShowSizeGuide(false)}
-                className="rounded p-1 text-[#6B6B6B] hover:text-[#1C1C1C] hover:bg-[#FFF0E8] transition-colors"
-                aria-label="Close size guide"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <p className="mb-4 text-xs text-[#6B6B6B]">
-              Measurements are in inches. This is a general guide — actual fit may vary by style.
-            </p>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="border-b border-[#E5D5C5]">
-                    <th className="pb-2 pr-4 text-xs font-semibold uppercase tracking-wider text-[#6B6B6B]">Size</th>
-                    <th className="pb-2 pr-4 text-xs font-semibold uppercase tracking-wider text-[#6B6B6B]">Bust</th>
-                    <th className="pb-2 pr-4 text-xs font-semibold uppercase tracking-wider text-[#6B6B6B]">Waist</th>
-                    <th className="pb-2 pr-4 text-xs font-semibold uppercase tracking-wider text-[#6B6B6B]">Hip</th>
-                    <th className="pb-2 text-xs font-semibold uppercase tracking-wider text-[#6B6B6B]">Length</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {SIZE_GUIDE_DATA.map((row) => (
-                    <tr key={row.size} className="border-b border-[#E5D5C5]/30 last:border-0">
-                      <td className="py-2 pr-4 font-medium text-[#1C1C1C]">{row.size}</td>
-                      <td className="py-2 pr-4 text-[#6B6B6B]">{row.bust}</td>
-                      <td className="py-2 pr-4 text-[#6B6B6B]">{row.waist}</td>
-                      <td className="py-2 pr-4 text-[#6B6B6B]">{row.hip}</td>
-                      <td className="py-2 text-[#6B6B6B]">{row.length}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <p className="mt-4 text-xs text-[#6B6B6B] italic">
-              This is a placeholder size chart. Please refer to individual product measurements or contact us for exact sizing assistance.
-            </p>
-            <div className="mt-4">
-              <button
-                type="button"
-                onClick={() => setShowSizeGuide(false)}
-                className="w-full rounded bg-[#800020] px-4 py-2 text-sm font-medium text-white hover:bg-[#66001A] transition-colors"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Recently Viewed */}
+      <div className="pb-12">
+        <RecentlyViewed />
+      </div>
     </>
   );
 }

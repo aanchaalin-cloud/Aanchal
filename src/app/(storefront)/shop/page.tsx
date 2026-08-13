@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { getActiveProductCatalog } from "@/lib/queries/products";
-import { FALLBACK_PRODUCTS } from "@/lib/data/fallback-products";
 import { ShopPageClient } from "./ShopPageClient";
 import type { ProductWithDetails } from "@/types";
 
@@ -8,6 +7,9 @@ export const metadata: Metadata = {
   title: "Shop All Products",
   description:
     "Browse our full collection of handcrafted Indian clothing — sarees, kurtas, lehengas, and more. Find your perfect fit at Aanchal.",
+  alternates: {
+    canonical: "/shop",
+  },
   openGraph: {
     title: "Shop All Products | Aanchal",
     description:
@@ -20,7 +22,7 @@ export const revalidate = 60;
 export default async function ShopPage() {
   const result = await getActiveProductCatalog();
 
-  const products: ProductWithDetails[] = result.data ?? FALLBACK_PRODUCTS;
+  const products: ProductWithDetails[] = result.data ?? [];
 
   return <ShopPageClient products={products} />;
 }

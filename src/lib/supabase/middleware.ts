@@ -55,6 +55,21 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  const isCustomerRoute =
+    pathname === "/account" ||
+    pathname.startsWith("/account/") ||
+    pathname === "/influencer/apply";
+
+  if (isCustomerRoute) {
+    if (!user) {
+      const loginUrl = request.nextUrl.clone();
+      loginUrl.pathname = "/login";
+      loginUrl.searchParams.set("redirected", "true");
+      loginUrl.searchParams.set("next", pathname + request.nextUrl.search);
+      return NextResponse.redirect(loginUrl);
+    }
+  }
+
   if (pathname.startsWith("/admin") && pathname !== "/admin/login") {
     if (!user) {
       const loginUrl = request.nextUrl.clone();

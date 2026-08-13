@@ -43,6 +43,7 @@ export type ProductVariant = {
 
 export type Order = {
   id: string;
+  order_number: string | null;
   customer_name: string;
   customer_email: string;
   customer_phone: string;
@@ -59,19 +60,27 @@ export type Order = {
   order_status: OrderStatus;
   razorpay_order_id: string | null;
   razorpay_payment_id: string | null;
+  payment_provider: PaymentProvider | null;
+  paytm_order_id: string | null;
+  paytm_txn_id: string | null;
   payment_method: PaymentMethod;
   prepaid_amount: number;
   cod_amount: number;
   discount_amount: number;
   coupon_id: string | null;
+  reward_voucher_code: string | null;
   shipping_provider: string | null;
   tracking_id: string | null;
   tracking_url: string | null;
   shipping_status: string | null;
   shipped_at: string | null;
   delivered_at: string | null;
+  cancelled_at: string | null;
+  cancellation_note: string | null;
+  influencer_code: string | null;
   estimated_delivery_date: string | null;
   packaging_status: PackagingStatus;
+  shiprocket_shipment_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -93,14 +102,8 @@ export type OrderItem = {
   created_at: string;
 };
 
-export type AdminUser = {
-  id: string;
-  email: string;
-  created_at: string;
-};
-
 // ============================================================
-// NEW: ORDER MEASUREMENTS
+// ORDER MEASUREMENTS
 // ============================================================
 
 export type OrderMeasurement = {
@@ -109,6 +112,7 @@ export type OrderMeasurement = {
   chest: number;
   waist: number;
   full_height: number;
+  shoulder: number | null;
   unit: "cm" | "inches";
   personalisation_request: string | null;
   created_at: string;
@@ -116,7 +120,7 @@ export type OrderMeasurement = {
 };
 
 // ============================================================
-// NEW: ORDER STATUS HISTORY
+// ORDER STATUS HISTORY
 // ============================================================
 
 export type OrderStatusHistoryEntry = {
@@ -126,73 +130,6 @@ export type OrderStatusHistoryEntry = {
   new_status: string;
   changed_by: string | null;
   notes: string | null;
-  created_at: string;
-};
-
-// ============================================================
-// NEW: COUPONS
-// ============================================================
-
-export type Coupon = {
-  id: string;
-  code: string;
-  description: string | null;
-  discount_type: "fixed" | "percentage";
-  discount_value: number;
-  min_order_amount: number | null;
-  max_discount_amount: number | null;
-  usage_limit: number | null;
-  per_customer_limit: number | null;
-  start_date: string | null;
-  end_date: string | null;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-};
-
-export type CouponUsage = {
-  id: string;
-  coupon_id: string;
-  order_id: string;
-  customer_email: string;
-  discount_amount: number;
-  created_at: string;
-};
-
-// ============================================================
-// NEW: PRODUCT REVIEWS
-// ============================================================
-
-export type Review = {
-  id: string;
-  product_id: string;
-  order_id: string | null;
-  customer_name: string;
-  customer_email: string;
-  rating: number;
-  title: string | null;
-  body: string;
-  image_url: string | null;
-  is_verified_purchase: boolean;
-  is_featured: boolean;
-  is_approved: boolean;
-  created_at: string;
-};
-
-// ============================================================
-// NEW: ORDER NOTIFICATIONS
-// ============================================================
-
-export type OrderNotification = {
-  id: string;
-  order_id: string;
-  customer_phone: string;
-  type: NotificationType;
-  provider: string;
-  status: "pending" | "sent" | "failed";
-  provider_message_id: string | null;
-  failure_reason: string | null;
-  sent_at: string | null;
   created_at: string;
 };
 
@@ -223,14 +160,9 @@ export type OrderStatus =
 
 export type PaymentMethod = "prepaid" | "cod";
 
-export type PackagingStatus = "pending" | "packed" | "ready_for_pickup";
+export type PaymentProvider = "razorpay" | "paytm";
 
-export type NotificationType =
-  | "order_confirmed"
-  | "order_shipped"
-  | "tracking_info"
-  | "delivery_day"
-  | "order_delivered";
+export type PackagingStatus = "pending" | "packed" | "ready_for_pickup";
 
 // ============================================================
 // COMPOSED / ENRICHED TYPES
@@ -248,6 +180,21 @@ export type OrderWithItems = Order & {
 
 export type OrderWithMeasurements = OrderWithItems & {
   order_measurements: OrderMeasurement | null;
+};
+
+// ============================================================
+// REVIEW TYPES (public API response shape)
+// ============================================================
+
+export type ProductReview = {
+  id: string;
+  customer_name: string;
+  rating: number;
+  title: string | null;
+  body: string;
+  is_verified_purchase: boolean;
+  created_at: string;
+  images?: string[]; // optional public URLs of uploaded review images
 };
 
 // ============================================================
@@ -269,27 +216,6 @@ export type CartItem = {
   quantity: number;
 };
 
-export type Cart = {
-  items: CartItem[];
-};
-
-// ============================================================
-// API RESPONSE TYPES
-// ============================================================
-
-export type ApiSuccess<T> = {
-  success: true;
-  data: T;
-};
-
-export type ApiError = {
-  success: false;
-  error: string;
-  code?: string;
-};
-
-export type ApiResponse<T> = ApiSuccess<T> | ApiError;
-
 // ============================================================
 // CHECKOUT TYPES
 // ============================================================
@@ -310,13 +236,16 @@ export type MeasurementData = {
   chest: number;
   waist: number;
   full_height: number;
+  shoulder: number;
   unit: "cm" | "inches";
   personalisation_request?: string;
 };
 
 export type RazorpayOrderResponse = {
   orderId: string;          // Supabase order UUID
-  razorpayOrderId: string;  // Razorpay order ID
+  paymentGateway: PaymentProvider;
+  alreadyPaid?: boolean;    // true when resuming an already-settled order
+  razorpayOrderId?: string; // Razorpay order ID (gateway = razorpay)
   amount: number;           // in paise
   currency: string;
   customerName: string;
@@ -327,39 +256,27 @@ export type RazorpayOrderResponse = {
   prepaidAmount: number;
   codAmount: number;
   discountAmount: number;
+  paytm?: {
+    paytmOrderId: string;
+    txnToken: string;
+    redirectUrl: string;
+  };
 };
 
 export type PublicOrderStatus = {
   id: string;
+  order_number: string | null;
   payment_status: PaymentStatus;
   order_status: OrderStatus;
   total_amount: number;
   created_at: string;
-};
-
-export type PaymentVerificationPayload = {
-  orderId: string;
-  razorpayOrderId: string;
-  razorpayPaymentId: string;
-  razorpaySignature: string;
+  payment_provider: PaymentProvider | null;
+  paytm_order_id: string | null;
 };
 
 // ============================================================
 // ADMIN FORM TYPES
 // ============================================================
-
-export type ProductFormData = {
-  name: string;
-  slug: string;
-  description: string;
-  category: string;
-  price: number;
-  discount_price?: number | null;
-  fabric: string;
-  wash_care: string;
-  is_featured: boolean;
-  is_active: boolean;
-};
 
 export type VariantFormData = {
   id?: string;       // present when editing existing variant
@@ -368,69 +285,4 @@ export type VariantFormData = {
   color_hex: string;
   sku: string;
   stock: number;
-};
-
-// ============================================================
-// COUPON FORM (Admin)
-// ============================================================
-
-export type CouponFormData = {
-  code: string;
-  description: string;
-  discount_type: "fixed" | "percentage";
-  discount_value: number;
-  min_order_amount?: number | null;
-  max_discount_amount?: number | null;
-  usage_limit?: number | null;
-  per_customer_limit?: number | null;
-  start_date?: string | null;
-  end_date?: string | null;
-  is_active: boolean;
-};
-
-// ============================================================
-// REVIEW FORM (Customer)
-// ============================================================
-
-export type ReviewFormData = {
-  product_id: string;
-  customer_name: string;
-  customer_email: string;
-  rating: number;
-  title?: string;
-  body: string;
-};
-
-// ============================================================
-// REWARD SUBMISSIONS
-// ============================================================
-
-export type RewardSubmission = {
-  id: string;
-  order_id: string;
-  customer_name: string;
-  customer_email: string;
-  customer_phone: string | null;
-  social_url: string;
-  platform: "instagram" | "youtube" | "facebook" | "other";
-  review_title: string | null;
-  review_body: string;
-  status: "pending" | "approved" | "rejected";
-  reviewed_by: string | null;
-  reviewed_at: string | null;
-  rejection_reason: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
-export type RewardVoucher = {
-  id: string;
-  submission_id: string;
-  code: string;
-  customer_email: string;
-  value: number;
-  is_used: boolean;
-  used_by_order_id: string | null;
-  expires_at: string;
-  created_at: string;
 };

@@ -10,21 +10,3 @@ export function getWhatsAppUrl(productName?: string): string {
     : "Hi, I need help with my Aanchal order.";
   return `https://wa.me/${WHATSAPP_NUMBER.replace(/[^\d]/g, "")}?text=${encodeURIComponent(message)}`;
 }
-
-/**
- * Open WhatsApp in a new tab.
- */
-export function openWhatsApp(productName?: string): void {
-  if (typeof window !== "undefined") {
-    window.open(getWhatsAppUrl(productName), "_blank");
-  }
-}
-
-/**
- * Check if Supabase is configured (not in fallback mode).
- */
-export function isSupabaseReady(): boolean {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  return !!(url && key && !url.includes("placeholder") && !key.includes("placeholder"));
-}

@@ -5,6 +5,9 @@ export const metadata: Metadata = {
   title: "About Us & Contact",
   description:
     "Learn about Aanchal — our story, values, and how to get in touch. Email, phone, and address for customer support and inquiries.",
+  alternates: {
+    canonical: "/contact",
+  },
   openGraph: {
     title: "About Us & Contact | Aanchal",
     description:

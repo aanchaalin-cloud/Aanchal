@@ -32,6 +32,24 @@ export async function GET(): Promise<NextResponse> {
     );
   }
 
+  // attach images where possible
+  try {
+    const reviewList = (reviews ?? []) as Array<{ id: string } & Record<string, unknown>>;
+    const ids = reviewList.map((r) => r.id);
+    if (ids.length > 0) {
+      const { data: images } = await supabase.from("review_images").select("review_id, url").in("review_id", ids);
+      const byReview: Record<string, string[]> = {};
+      (images ?? []).forEach((img: { review_id: string; url: string }) => {
+        byReview[img.review_id] = byReview[img.review_id] ?? [];
+        byReview[img.review_id].push(img.url);
+      });
+      const enriched = reviewList.map((r) => ({ ...(r as Record<string, unknown>), images: byReview[r.id] ?? [] }));
+      return NextResponse.json({ success: true, data: enriched });
+    }
+  } catch (err) {
+    console.error("[admin-attach-review-images]", err);
+  }
+
   return NextResponse.json({ success: true, data: reviews });
 }
 

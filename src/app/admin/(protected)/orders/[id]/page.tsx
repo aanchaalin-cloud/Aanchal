@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getOrderByIdAdmin, getOrderStatusHistory } from "@/lib/queries/orders";
 import { formatPrice, formatDate, getOrderStatusLabel, getOrderStatusColor, getPaymentStatusColor, getPaymentMethodLabel } from "@/lib/utils";
 import { OrderStatusUpdater } from "@/components/admin/OrderStatusUpdater";
+import { CreateShipmentButton } from "@/components/admin/CreateShipmentButton";
 import { Ruler, FileText } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +20,7 @@ export default async function AdminOrderDetailPage({ params }: Props) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <Link href="/admin/orders" className="text-sm text-stone-600 hover:text-stone-900">← Back to Orders</Link>
           <h1 className="mt-1 text-2xl font-semibold text-stone-900">Order {order.id.slice(0, 8)}…</h1>
@@ -29,6 +30,7 @@ export default async function AdminOrderDetailPage({ params }: Props) {
           currentStatus={order.order_status}
           packagingStatus={order.packaging_status}
         />
+        <CreateShipmentButton orderId={order.id} />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -63,7 +65,7 @@ export default async function AdminOrderDetailPage({ params }: Props) {
             <h2 className="text-sm font-semibold text-stone-900 mb-4">Payment Breakdown</h2>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div><p className="text-stone-600">Subtotal</p><p className="font-medium">{formatPrice(order.subtotal)}</p></div>
-              <div><p className="text-stone-600">Shipping</p><p className="font-medium">{order.shipping_fee === 0 ? "Free" : formatPrice(order.shipping_fee)}</p></div>
+              <div><p className="text-stone-600">Shipping</p><p className="font-medium">{formatPrice(order.shipping_fee)}</p></div>
               {order.discount_amount > 0 && (
                 <div><p className="text-stone-600">Discount</p><p className="font-medium text-green-600">-{formatPrice(order.discount_amount)}</p></div>
               )}
@@ -90,7 +92,7 @@ export default async function AdminOrderDetailPage({ params }: Props) {
                 <Ruler className="h-4 w-4 text-[#95271D]" />
                 Custom Fit Measurements
               </h2>
-              <div className="grid grid-cols-3 gap-4 text-sm">
+              <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
                 <div>
                   <p className="text-stone-600">Chest</p>
                   <p className="font-medium">{order.order_measurements.chest} cm</p>
@@ -102,6 +104,12 @@ export default async function AdminOrderDetailPage({ params }: Props) {
                 <div>
                   <p className="text-stone-600">Full Height</p>
                   <p className="font-medium">{order.order_measurements.full_height} cm</p>
+                </div>
+                <div>
+                  <p className="text-stone-600">Shoulder</p>
+                  <p className="font-medium">
+                    {order.order_measurements.shoulder ? `${order.order_measurements.shoulder} cm` : "—"}
+                  </p>
                 </div>
               </div>
               {order.order_measurements.personalisation_request && (
@@ -195,8 +203,21 @@ export default async function AdminOrderDetailPage({ params }: Props) {
               <div className="flex justify-between"><span className="text-stone-600">Updated</span><span>{formatDate(order.updated_at)}</span></div>
               {order.shipped_at && <div className="flex justify-between"><span className="text-stone-600">Shipped</span><span>{formatDate(order.shipped_at)}</span></div>}
               {order.delivered_at && <div className="flex justify-between"><span className="text-stone-600">Delivered</span><span>{formatDate(order.delivered_at)}</span></div>}
+              {order.cancelled_at && <div className="flex justify-between"><span className="text-stone-600">Cancelled</span><span>{formatDate(order.cancelled_at)}</span></div>}
               {order.tracking_id && <div><p className="text-stone-600">Tracking</p><p className="font-mono text-xs break-all">{order.tracking_id}</p></div>}
               {order.shipping_provider && <div><p className="text-stone-600">Carrier</p><p className="text-xs">{order.shipping_provider}</p></div>}
+              {order.influencer_code && (
+                <div>
+                  <p className="text-stone-600">Influencer Code</p>
+                  <p className="font-mono text-xs text-[#95271D]">{order.influencer_code}</p>
+                </div>
+              )}
+              {order.cancellation_note && (
+                <div>
+                  <p className="text-stone-600">Cancellation Note</p>
+                  <p className="text-xs text-stone-500">{order.cancellation_note}</p>
+                </div>
+              )}
             </div>
           </div>
 

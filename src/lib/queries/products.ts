@@ -2,7 +2,7 @@ import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { Messages } from "@/lib/messages";
-import type { ProductWithDetails, Product } from "@/types";
+import type { ProductWithDetails } from "@/types";
 
 export type ProductQueryResult<T> =
   | { data: T; error: null }
@@ -81,26 +81,53 @@ export const getActiveProductBySlug = cache(async function getActiveProductBySlu
 });
 
 /**
- * Fetch all active products for the public shop page.
- * Uses anon key + RLS — only returns is_active = true.
+ * Fetch all active product slugs for static generation.
+ * Lightweight query — only the slug column is needed.
  */
-export async function getActiveProducts(): Promise<Product[]> {
+export async function getActiveProductSlugs(): Promise<string[]> {
   if (!isSupabaseConfigured()) return [];
 
   const supabase = await createClient();
 
   const { data, error } = await supabase
     .from("products")
-    .select("*")
-    .eq("is_active", true)
-    .order("created_at", { ascending: false });
+    .select("slug")
+    .eq("is_active", true);
 
   if (error) {
-    console.warn("[getActiveProducts]", error.message);
+    console.warn("[getActiveProductSlugs]", error.message);
     return [];
   }
 
-  return data ?? [];
+  return ((data ?? []) as Array<{ slug: string }>).map((p) => p.slug);
+}
+
+/**
+ * Fetch slug + timestamps for active products (used by sitemap).
+ * Lightweight query — only the columns needed for sitemap entries.
+ */
+export async function getActiveProductSitemapEntries(): Promise<
+  Array<{ slug: string; updated_at: string | null; created_at: string }>
+> {
+  if (!isSupabaseConfigured()) return [];
+
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("products")
+    .select("slug, updated_at, created_at")
+    .eq("is_active", true);
+
+  if (error) {
+    console.warn("[getActiveProductSitemapEntries]", error.message);
+    return [];
+  }
+
+  return (data ?? []) as Array<{
+    slug: string;
+    updated_at: string | null;
+    created_at: string;
+  }>;
 }
 
 /**

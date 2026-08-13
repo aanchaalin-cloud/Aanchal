@@ -32,10 +32,34 @@ export async function requireAdmin(): Promise<NextResponse | null> {
   return null;
 }
 
+export async function requireSuperAdmin(): Promise<NextResponse | null> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ success: false, error: "Authentication required" }, { status: 401 });
+  const { data: admin } = await supabase
+    .from("admin_users")
+    .select("id, role")
+    .eq("id", user.id)
+    .single();
+  if (!admin) return NextResponse.json({ success: false, error: "Admin access required" }, { status: 403 });
+  if (admin.role !== "superadmin") {
+    return NextResponse.json({ success: false, error: "Super admin access required" }, { status: 403 });
+  }
+  return null;
+}
+
 function isSameOrigin(origin: string, host: string): boolean {
   try {
+    // Compare hostnames only: dev servers and some proxies send the origin on
+    // a different port (e.g. 3001 vs the Host header), which is still the same
+    // origin as far as CSRF is concerned.
     const originHost = new URL(origin).hostname;
-    return originHost === host || originHost === "localhost" || originHost === "127.0.0.1";
+    const hostHost = host.split(":")[0];
+    if (originHost === hostHost) return true;
+    // Localhost origin is only acceptable when the site itself is served from
+    // localhost (local dev); never trust a localhost Origin on a public host.
+    const isLocalHost = hostHost === "localhost" || hostHost === "127.0.0.1";
+    return isLocalHost && (originHost === "localhost" || originHost === "127.0.0.1");
   } catch {
     return false;
   }
