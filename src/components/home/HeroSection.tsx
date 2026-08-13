@@ -13,30 +13,51 @@ export function HeroSection({ content }: { content?: HomepageSectionContent }) {
   const sectionRef = useRef<HTMLElement>(null);
   const [showReplay, setShowReplay] = useState(false);
 
+  const tryPlay = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.play().catch(() => {
+      // Autoplay can be blocked before the browser considers the page
+      // "user-activated". If playback fails for any reason, keep the poster
+      // visible and let the user start playback manually via the replay button.
+      setShowReplay(true);
+    });
+  }, []);
+
   const handleReplay = useCallback(() => {
     const video = videoRef.current;
     if (video) {
       video.currentTime = 0;
-      video.play();
+      tryPlay();
       setShowReplay(false);
     }
-  }, []);
+  }, [tryPlay]);
 
   useEffect(() => {
     const video = videoRef.current;
     const section = sectionRef.current;
     if (!video || !section) return;
 
+    // Start playback once the browser can play the source.
+    video.addEventListener("canplay", tryPlay, { once: true });
+    if (video.readyState >= 2) tryPlay();
+
     const onScroll = () => {
       const rect = section.getBoundingClientRect();
-      if (rect.bottom < 0 || rect.top > window.innerHeight) {
+      const visible = rect.bottom > 0 && rect.top < window.innerHeight;
+      if (visible) {
+        tryPlay();
+      } else {
         video.pause();
       }
     };
 
     window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+    return () => {
+      video.removeEventListener("canplay", tryPlay);
+      window.removeEventListener("scroll", onScroll);
+    };
+  }, [tryPlay]);
 
   return (
     <section ref={sectionRef} className="relative min-h-screen -mt-16 overflow-hidden">
@@ -44,10 +65,10 @@ export function HeroSection({ content }: { content?: HomepageSectionContent }) {
         ref={videoRef}
         autoPlay
         muted
+        loop
         playsInline
-        preload="metadata"
+        preload="auto"
         poster="/anarkali.webp"
-        onEnded={() => setShowReplay(true)}
         className="absolute inset-0 h-full w-full object-cover"
       >
         <source src={videoUrl} type="video/mp4" />
