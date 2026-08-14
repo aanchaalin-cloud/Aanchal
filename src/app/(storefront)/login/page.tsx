@@ -8,12 +8,11 @@ import {
   AlertCircle,
   ArrowRight,
   Lock,
+  MailCheck,
   Package,
   Heart,
   Zap,
   Star,
-  ChevronLeft,
-  MailCheck,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
@@ -75,16 +74,23 @@ function LoginForm() {
       ? rawNext
       : "/account";
   const resetSent = searchParams.get("reset") === "true";
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [lockedOut, setLockedOut] = useState(false);
+
+  const [magicOpen, setMagicOpen] = useState(false);
+  const [magicSent, setMagicSent] = useState(false);
+  const [magicLoading, setMagicLoading] = useState(false);
+
   const [forgotOpen, setForgotOpen] = useState(false);
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotSent, setForgotSent] = useState(false);
   const [forgotLoading, setForgotLoading] = useState(false);
 
+  /* ── Email + Password Sign In ── */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -132,6 +138,51 @@ function LoginForm() {
     router.refresh();
   };
 
+  /* ── Google Sign-In ── */
+  const handleGoogle = async () => {
+    setError(null);
+    if (!isSupabaseConfigured()) {
+      setError(Messages.dbConfigError);
+      return;
+    }
+    const supabase = createClient();
+    const { error: googleError } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}${next}`,
+        queryParams: { prompt: "select_account" },
+      },
+    });
+    if (googleError) setError(googleError.message);
+  };
+
+  /* ── Magic Link ── */
+  const handleMagicLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setMagicLoading(true);
+
+    if (!isSupabaseConfigured()) {
+      setError(Messages.dbConfigError);
+      setMagicLoading(false);
+      return;
+    }
+
+    const supabase = createClient();
+    const { error: magicError } = await supabase.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: `${window.location.origin}${next}` },
+    });
+    setMagicLoading(false);
+
+    if (magicError) {
+      setError(magicError.message);
+      return;
+    }
+    setMagicSent(true);
+  };
+
+  /* ── Forgot Password ── */
   const handleForgot = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -153,105 +204,214 @@ function LoginForm() {
       setError(forgotError.message);
       return;
     }
-
     setForgotSent(true);
   };
 
-  return (
-    <div className="mx-auto w-full max-w-4xl px-4 py-10 sm:py-16">
-      <div className="grid gap-8 md:grid-cols-2 md:gap-0">
-        {/* Form column */}
-        <div className="rounded-sm border border-[#EDE0D4] bg-white p-6 shadow-sm md:rounded-r-none md:border-r-0">
-          {forgotOpen ? (
-            <>
-              <button
-                type="button"
-                onClick={() => {
-                  setForgotOpen(false);
-                  setForgotSent(false);
-                  setError(null);
-                }}
-                className="mb-4 flex items-center gap-1 text-sm text-[#6B6B6B] hover:text-[#800020]"
-              >
-                <ChevronLeft className="h-4 w-4" />
-                Back to sign in
-              </button>
+  /* ── Forgot Password View ── */
+  if (forgotOpen) {
+    return (
+      <div className="mx-auto w-full max-w-md px-4 py-16 sm:py-24">
+        <button
+          type="button"
+          onClick={() => {
+            setForgotOpen(false);
+            setForgotSent(false);
+            setError(null);
+          }}
+          className="mb-6 flex items-center gap-1 text-sm text-[#6B6B6B] hover:text-[#800020]"
+        >
+          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          Back to sign in
+        </button>
 
-              <h1 className="font-display text-2xl text-[#1C1C1C]">
-                Reset your password
-              </h1>
-              <p className="mt-2 text-sm text-[#6B6B6B]">
-                We&apos;ll email you a secure link to choose a new password.
+        <div className="rounded-lg border border-[#E5D5C5] bg-white p-8 shadow-sm">
+          <h1 className="text-2xl font-semibold text-[#1C1C1C]">
+            Reset your password
+          </h1>
+          <p className="mt-2 text-sm text-[#6B6B6B]">
+            Enter your email and we&apos;ll send you a secure reset link.
+          </p>
+
+          {forgotSent ? (
+            <div className="mt-6 flex items-start gap-3 rounded-md border border-[#800020]/20 bg-[#800020]/5 px-4 py-3">
+              <MailCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#800020]" />
+              <p className="text-sm text-[#1C1C1C]">
+                If an account exists for{" "}
+                <span className="font-medium">{forgotEmail}</span>, a reset
+                link is on its way. Check your inbox.
               </p>
-
-              {forgotSent ? (
-                <div className="mt-6 flex items-start gap-3 rounded-sm border border-[#800020]/20 bg-[#800020]/5 px-4 py-3">
-                  <MailCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#800020]" />
-                  <p className="text-sm text-[#1C1C1C]">
-                    If an account exists for{" "}
-                    <span className="font-medium">{forgotEmail}</span>, a reset
-                    link is on its way. Check your inbox.
-                  </p>
-                </div>
-              ) : (
-                <form onSubmit={handleForgot} className="mt-6 space-y-4">
-                  <div>
-                    <label
-                      htmlFor="forgot-email"
-                      className="mb-1 block text-xs font-medium text-[#6B6B6B]"
-                    >
-                      Email Address
-                    </label>
-                    <input
-                      id="forgot-email"
-                      type="email"
-                      value={forgotEmail}
-                      onChange={(e) => setForgotEmail(e.target.value)}
-                      required
-                      autoComplete="email"
-                      className="w-full rounded border border-[#D4C5B5] bg-white px-3 py-2 text-sm text-[#1C1C1C] placeholder-[#6B6B6B] focus:outline-none focus:ring-2 focus:ring-[#800020]"
-                      placeholder="you@email.com"
-                    />
-                  </div>
-
-                  {error && (
-                    <div className="flex items-start gap-2 rounded-sm border border-[#800020]/20 bg-[#800020]/5 px-4 py-3 text-sm text-[#800020]">
-                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                      <span>{error}</span>
-                    </div>
-                  )}
-
-                  <Button type="submit" fullWidth loading={forgotLoading}>
-                    Send Reset Link
-                  </Button>
-                </form>
-              )}
-            </>
+            </div>
           ) : (
-            <>
-              <div className="mb-6">
-                <h1 className="font-display text-3xl text-[#1C1C1C]">
-                  Sign In
-                </h1>
-                <p className="mt-2 text-sm text-[#6B6B6B]">
-                  Welcome back to Aanchal.
-                </p>
+            <form onSubmit={handleForgot} className="mt-6 space-y-4">
+              <div>
+                <label
+                  htmlFor="forgot-email"
+                  className="mb-1.5 block text-sm font-medium text-[#1C1C1C]"
+                >
+                  Email address
+                </label>
+                <input
+                  id="forgot-email"
+                  type="email"
+                  value={forgotEmail}
+                  onChange={(e) => setForgotEmail(e.target.value)}
+                  required
+                  autoComplete="email"
+                  className="input-field"
+                  placeholder="you@email.com"
+                />
               </div>
 
-              {resetSent && (
-                <div className="mb-4 flex items-start gap-2 rounded-sm border border-[#800020]/20 bg-[#800020]/5 px-4 py-3 text-sm text-[#800020]">
-                  <MailCheck className="mt-0.5 h-4 w-4 shrink-0" />
-                  <span>Your password has been updated. Please sign in.</span>
+              {error && (
+                <div className="flex items-start gap-2 rounded-md border border-[#800020]/20 bg-[#800020]/5 px-4 py-3 text-sm text-[#800020]">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>{error}</span>
                 </div>
               )}
 
+              <Button type="submit" fullWidth loading={forgotLoading}>
+                Send Reset Link
+              </Button>
+            </form>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  /* ── Magic Link Sent View ── */
+  if (magicSent) {
+    return (
+      <div className="mx-auto w-full max-w-md px-4 py-16 sm:py-24">
+        <div className="rounded-lg border border-[#E5D5C5] bg-white p-8 shadow-sm text-center">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[#800020]/10">
+            <MailCheck className="h-6 w-6 text-[#800020]" />
+          </div>
+          <h1 className="mt-4 text-2xl font-semibold text-[#1C1C1C]">
+            Check your email
+          </h1>
+          <p className="mt-2 text-sm text-[#6B6B6B]">
+            We sent a sign-in link to{" "}
+            <span className="font-medium text-[#1C1C1C]">{email}</span>.
+            Click the link in the email to continue.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setMagicSent(false);
+              setMagicOpen(false);
+            }}
+            className="mt-6 text-sm font-medium text-[#800020] hover:underline"
+          >
+            Back to sign in
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  /* ── Main Login View ── */
+  return (
+    <div className="mx-auto w-full max-w-5xl px-4 py-10 sm:py-16">
+      <div className="grid gap-8 md:grid-cols-2 md:gap-12">
+        {/* ── Left: Auth Card ── */}
+        <div className="flex flex-col justify-center">
+          <div className="rounded-lg border border-[#E5D5C5] bg-white p-8 shadow-sm">
+            <div className="mb-6">
+              <h1 className="text-2xl font-semibold text-[#1C1C1C]">
+                Welcome back
+              </h1>
+              <p className="mt-1 text-sm text-[#6B6B6B]">
+                Sign in to your Aanchal account
+              </p>
+            </div>
+
+            {resetSent && (
+              <div className="mb-4 flex items-start gap-2 rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+                <MailCheck className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>Your password has been updated. Please sign in.</span>
+              </div>
+            )}
+
+            {/* ── Google Sign-In ── */}
+            {isSupabaseConfigured() && (
+              <button
+                type="button"
+                onClick={handleGoogle}
+                className="flex w-full items-center justify-center gap-3 rounded-md border border-[#D4C5B5] bg-white px-4 py-2.5 text-sm font-medium text-[#1C1C1C] transition-colors hover:border-[#800020] hover:bg-[#FFF0E8]"
+              >
+                <svg className="h-5 w-5" viewBox="0 0 24 24">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                </svg>
+                Continue with Google
+              </button>
+            )}
+
+            {/* ── Divider ── */}
+            <div className="my-5 flex items-center gap-3">
+              <div className="h-px flex-1 bg-[#E5D5C5]" />
+              <span className="text-xs font-medium uppercase tracking-wider text-[#6B6B6B]">or</span>
+              <div className="h-px flex-1 bg-[#E5D5C5]" />
+            </div>
+
+            {/* ── Email + Password Form ── */}
+            {magicOpen ? (
+              <form onSubmit={handleMagicLink} className="space-y-4">
+                <p className="text-sm text-[#6B6B6B]">
+                  Enter your email and we&apos;ll send you a sign-in link — no password needed.
+                </p>
+                <div>
+                  <label
+                    htmlFor="magic-email"
+                    className="mb-1.5 block text-sm font-medium text-[#1C1C1C]"
+                  >
+                    Email address
+                  </label>
+                  <input
+                    id="magic-email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    autoComplete="email"
+                    className="input-field"
+                    placeholder="you@email.com"
+                  />
+                </div>
+
+                {error && (
+                  <div className="flex items-start gap-2 rounded-md border border-[#800020]/20 bg-[#800020]/5 px-4 py-3 text-sm text-[#800020]">
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>{error}</span>
+                  </div>
+                )}
+
+                <Button type="submit" fullWidth loading={magicLoading}>
+                  Send Magic Link
+                </Button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMagicOpen(false);
+                    setError(null);
+                  }}
+                  className="w-full text-center text-sm text-[#6B6B6B] hover:text-[#800020]"
+                >
+                  Use password instead
+                </button>
+              </form>
+            ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label
                     htmlFor="email"
-                    className="mb-1 block text-xs font-medium text-[#6B6B6B]"
+                    className="mb-1.5 block text-sm font-medium text-[#1C1C1C]"
                   >
-                    Email Address
+                    Email address
                   </label>
                   <input
                     id="email"
@@ -260,16 +420,16 @@ function LoginForm() {
                     onChange={(e) => setEmail(e.target.value)}
                     required
                     autoComplete="email"
-                    className="w-full rounded border border-[#D4C5B5] bg-white px-3 py-2 text-sm text-[#1C1C1C] placeholder-[#6B6B6B] focus:outline-none focus:ring-2 focus:ring-[#800020]"
+                    className="input-field"
                     placeholder="you@email.com"
                   />
                 </div>
 
                 <div>
-                  <div className="mb-1 flex items-center justify-between">
+                  <div className="mb-1.5 flex items-center justify-between">
                     <label
                       htmlFor="password"
-                      className="block text-xs font-medium text-[#6B6B6B]"
+                      className="text-sm font-medium text-[#1C1C1C]"
                     >
                       Password
                     </label>
@@ -292,105 +452,92 @@ function LoginForm() {
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     autoComplete="current-password"
-                    className="w-full rounded border border-[#D4C5B5] bg-white px-3 py-2 text-sm text-[#1C1C1C] placeholder-[#6B6B6B] focus:outline-none focus:ring-2 focus:ring-[#800020]"
-                    placeholder="••••••••"
+                    className="input-field"
+                    placeholder="Enter your password"
                   />
                 </div>
 
                 {error && (
-                  <div className="flex items-start gap-2 rounded-sm border border-[#800020]/20 bg-[#800020]/5 px-4 py-3 text-sm text-[#800020]">
+                  <div className="flex items-start gap-2 rounded-md border border-[#800020]/20 bg-[#800020]/5 px-4 py-3 text-sm text-[#800020]">
                     <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                     <span>{error}</span>
                   </div>
                 )}
 
-                <Button type="submit" fullWidth loading={loading} disabled={lockedOut}>
+                <Button
+                  type="submit"
+                  fullWidth
+                  loading={loading}
+                  disabled={lockedOut}
+                >
                   Sign In
                 </Button>
 
-                {isSupabaseConfigured() && (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      setError(null);
-                      setLoading(true);
-                      const supabase = createClient();
-                      const { error: magicError } = await supabase.auth.signInWithOtp({
-                        email,
-                      });
-                      setLoading(false);
-                      if (magicError) {
-                        setError(magicError.message);
-                      } else {
-                        setError(null);
-                        alert(
-                          "If an account exists for this email, a sign-in link has been sent. Check your inbox."
-                        );
-                      }
-                    }}
-                    className="flex w-full items-center justify-center gap-2 text-sm text-[#800020] hover:underline"
-                  >
-                    <Lock className="h-3.5 w-3.5" />
-                    Sign in with a magic link
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMagicOpen(true);
+                    setError(null);
+                  }}
+                  className="flex w-full items-center justify-center gap-2 text-sm font-medium text-[#6B6B6B] hover:text-[#800020]"
+                >
+                  <Lock className="h-3.5 w-3.5" />
+                  Sign in with magic link instead
+                </button>
               </form>
+            )}
 
-              <div className="my-6 flex items-center gap-3">
-                <div className="h-px flex-1 bg-[#E5D5C5]" />
-                <span className="text-xs text-[#6B6B6B]">OR</span>
-                <div className="h-px flex-1 bg-[#E5D5C5]" />
-              </div>
+            {/* ── Divider ── */}
+            <div className="my-5 flex items-center gap-3">
+              <div className="h-px flex-1 bg-[#E5D5C5]" />
+              <span className="text-xs font-medium uppercase tracking-wider text-[#6B6B6B]">or</span>
+              <div className="h-px flex-1 bg-[#E5D5C5]" />
+            </div>
 
-              <Link
-                href="/shop"
-                className="flex w-full items-center justify-center gap-2 rounded-sm border border-[#D4C5B5] bg-white px-6 py-2.5 text-sm font-medium text-[#1C1C1C] hover:border-[#800020] hover:text-[#800020] transition-colors"
-              >
-                Continue as guest
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            </>
-          )}
+            {/* ── Create Account ── */}
+            <Link
+              href="/signup"
+              className="flex w-full items-center justify-center gap-2 rounded-md border-2 border-[#800020] bg-[#800020] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#66001A]"
+            >
+              Create an account
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+
+          {/* ── Guest Link ── */}
+          <p className="mt-4 text-center text-sm text-[#6B6B6B]">
+            Just browsing?{" "}
+            <Link
+              href="/shop"
+              className="font-medium text-[#800020] hover:underline"
+            >
+              Shop as guest
+            </Link>
+          </p>
         </div>
 
-        {/* Benefits column */}
-        <div className="rounded-sm border border-[#EDE0D4] bg-white p-6 shadow-sm md:rounded-l-none md:border-l-0">
-          <h2 className="font-display text-xl text-[#1C1C1C]">
+        {/* ── Right: Benefits ── */}
+        <div className="hidden md:flex flex-col justify-center">
+          <h2 className="text-lg font-semibold text-[#1C1C1C]">
             Why create an account?
           </h2>
-          <ul className="mt-5 space-y-4">
+          <ul className="mt-6 space-y-5">
             {BENEFITS.map((benefit) => (
               <li key={benefit.title} className="flex gap-3">
-                <benefit.icon className="mt-0.5 h-5 w-5 shrink-0 text-[#800020]" />
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#800020]/10">
+                  <benefit.icon className="h-4.5 w-4.5 text-[#800020]" />
+                </div>
                 <div>
                   <p className="text-sm font-medium text-[#1C1C1C]">
                     {benefit.title}
                   </p>
-                  <p className="mt-0.5 text-xs leading-relaxed text-[#6B6B6B]">
+                  <p className="mt-0.5 text-sm leading-relaxed text-[#6B6B6B]">
                     {benefit.text}
                   </p>
                 </div>
               </li>
             ))}
           </ul>
-
-          <div className="mt-8 border-t border-[#E5D5C5]/60 pt-6">
-            <p className="text-sm text-[#6B6B6B]">
-              New to Aanchal?{" "}
-              <Link
-                href="/signup"
-                className="font-medium text-[#800020] hover:underline"
-              >
-                Create an account
-              </Link>
-            </p>
-          </div>
-
-          {!isSupabaseConfigured() && (
-            <p className="mt-4 text-center text-xs text-[#6B6B6B]">
-              {Messages.dbConfigError}
-            </p>
-          )}
         </div>
       </div>
     </div>
