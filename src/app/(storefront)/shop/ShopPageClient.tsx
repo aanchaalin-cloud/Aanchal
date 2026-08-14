@@ -210,9 +210,6 @@ export function ShopPageClient({ products }: Props) {
         <h1 className="mt-1 text-3xl font-semibold text-[#1C1C1C]">
           All Products
         </h1>
-        <p className="mt-2 text-sm text-[#6B6B6B]">
-          {filtered.length} {filtered.length === 1 ? "piece" : "pieces"} available
-        </p>
       </div>
 
       {/* Mobile filter toggle */}

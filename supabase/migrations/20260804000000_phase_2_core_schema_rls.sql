@@ -15,7 +15,7 @@ create extension if not exists pgcrypto;
 -- Tables
 -- ------------------------------------------------------------------
 
-create table public.products (
+create table if not exists public.products (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   slug text not null unique,
@@ -33,7 +33,7 @@ create table public.products (
   updated_at timestamptz not null default now()
 );
 
-create table public.product_images (
+create table if not exists public.product_images (
   id uuid primary key default gen_random_uuid(),
   product_id uuid not null references public.products(id) on delete cascade,
   url text not null,
@@ -43,7 +43,7 @@ create table public.product_images (
   updated_at timestamptz not null default now()
 );
 
-create table public.product_variants (
+create table if not exists public.product_variants (
   id uuid primary key default gen_random_uuid(),
   product_id uuid not null references public.products(id) on delete cascade,
   size text,
@@ -60,7 +60,7 @@ create table public.product_variants (
 
 -- Orders carry the full order record. coupon_id FK is attached in Phase 6
 -- after the coupons table exists.
-create table public.orders (
+create table if not exists public.orders (
   id uuid primary key default gen_random_uuid(),
   customer_name text not null,
   customer_email text not null,
@@ -113,7 +113,7 @@ create table public.orders (
   updated_at timestamptz not null default now()
 );
 
-create table public.order_items (
+create table if not exists public.order_items (
   id uuid primary key default gen_random_uuid(),
   order_id uuid not null references public.orders(id) on delete cascade,
   product_id uuid not null references public.products(id) on delete restrict,
@@ -134,7 +134,7 @@ create table public.order_items (
   updated_at timestamptz not null default now()
 );
 
-create table public.admin_users (
+create table if not exists public.admin_users (
   id uuid primary key references auth.users(id) on delete cascade,
   email text not null unique,
   created_at timestamptz not null default now(),
@@ -145,43 +145,43 @@ create table public.admin_users (
 -- Indexes
 -- ------------------------------------------------------------------
 
-create index products_created_at_idx on public.products (created_at desc);
-create index products_active_created_at_idx on public.products (created_at desc)
+create index if not exists if not exists products_created_at_idx on public.products (created_at desc);
+create index if not exists if not exists products_active_created_at_idx on public.products (created_at desc)
   where is_active = true;
-create index products_featured_created_at_idx on public.products (created_at desc)
+create index if not exists if not exists products_featured_created_at_idx on public.products (created_at desc)
   where is_active = true and is_featured = true;
-create index products_category_active_idx on public.products (category, created_at desc)
+create index if not exists if not exists products_category_active_idx on public.products (category, created_at desc)
   where is_active = true;
 
-create index product_images_product_position_idx on public.product_images (product_id, position);
-create index product_images_created_at_idx on public.product_images (created_at desc);
+create index if not exists if not exists product_images_product_position_idx on public.product_images (product_id, position);
+create index if not exists if not exists product_images_created_at_idx on public.product_images (created_at desc);
 
-create index product_variants_product_id_idx on public.product_variants (product_id);
-create index product_variants_product_stock_idx on public.product_variants (product_id, stock);
-create index product_variants_created_at_idx on public.product_variants (created_at desc);
-create index product_variants_active_idx on public.product_variants (product_id, is_active)
+create index if not exists if not exists product_variants_product_id_idx on public.product_variants (product_id);
+create index if not exists if not exists product_variants_product_stock_idx on public.product_variants (product_id, stock);
+create index if not exists if not exists product_variants_created_at_idx on public.product_variants (created_at desc);
+create index if not exists if not exists product_variants_active_idx on public.product_variants (product_id, is_active)
   where is_active = true;
 
-create index orders_created_at_idx on public.orders (created_at desc);
-create index orders_status_created_at_idx on public.orders (order_status, created_at desc);
-create index orders_payment_status_created_at_idx on public.orders (payment_status, created_at desc);
-create index orders_customer_email_created_idx on public.orders (customer_email, created_at desc);
-create index orders_influencer_code_idx on public.orders (influencer_code)
+create index if not exists if not exists orders_created_at_idx on public.orders (created_at desc);
+create index if not exists if not exists orders_status_created_at_idx on public.orders (order_status, created_at desc);
+create index if not exists if not exists orders_payment_status_created_at_idx on public.orders (payment_status, created_at desc);
+create index if not exists if not exists orders_customer_email_created_idx on public.orders (customer_email, created_at desc);
+create index if not exists if not exists orders_influencer_code_idx on public.orders (influencer_code)
   where influencer_code is not null;
-create index orders_shipped_at_idx on public.orders (shipped_at)
+create index if not exists if not exists orders_shipped_at_idx on public.orders (shipped_at)
   where shipped_at is not null;
-create index orders_delivered_at_idx on public.orders (delivered_at)
+create index if not exists if not exists orders_delivered_at_idx on public.orders (delivered_at)
   where delivered_at is not null;
-create index orders_estimated_delivery_idx on public.orders (estimated_delivery_date)
+create index if not exists if not exists orders_estimated_delivery_idx on public.orders (estimated_delivery_date)
   where estimated_delivery_date is not null;
 
-create index order_items_order_id_idx on public.order_items (order_id);
-create index order_items_product_id_idx on public.order_items (product_id);
-create index order_items_variant_id_idx on public.order_items (variant_id)
+create index if not exists if not exists order_items_order_id_idx on public.order_items (order_id);
+create index if not exists if not exists order_items_product_id_idx on public.order_items (product_id);
+create index if not exists if not exists order_items_variant_id_idx on public.order_items (variant_id)
   where variant_id is not null;
-create index order_items_created_at_idx on public.order_items (created_at desc);
+create index if not exists if not exists order_items_created_at_idx on public.order_items (created_at desc);
 
-create index admin_users_created_at_idx on public.admin_users (created_at desc);
+create index if not exists if not exists admin_users_created_at_idx on public.admin_users (created_at desc);
 
 -- ------------------------------------------------------------------
 -- updated_at triggers
@@ -198,27 +198,33 @@ begin
 end;
 $$;
 
-create trigger products_set_updated_at
+drop trigger if exists products_set_updated_at on public.products;
+drop trigger if exists products_set_updated_at; create trigger products_set_updated_at
   before update on public.products
   for each row execute function public.set_updated_at();
 
-create trigger product_variants_set_updated_at
+drop trigger if exists product_variants_set_updated_at on public.product_variants;
+drop trigger if exists product_variants_set_updated_at; create trigger product_variants_set_updated_at
   before update on public.product_variants
   for each row execute function public.set_updated_at();
 
-create trigger orders_set_updated_at
+drop trigger if exists orders_set_updated_at on public.orders;
+drop trigger if exists orders_set_updated_at; create trigger orders_set_updated_at
   before update on public.orders
   for each row execute function public.set_updated_at();
 
-create trigger product_images_set_updated_at
+drop trigger if exists product_images_set_updated_at on public.product_images;
+drop trigger if exists product_images_set_updated_at; create trigger product_images_set_updated_at
   before update on public.product_images
   for each row execute function public.set_updated_at();
 
-create trigger order_items_set_updated_at
+drop trigger if exists order_items_set_updated_at on public.order_items;
+drop trigger if exists order_items_set_updated_at; create trigger order_items_set_updated_at
   before update on public.order_items
   for each row execute function public.set_updated_at();
 
-create trigger admin_users_set_updated_at
+drop trigger if exists admin_users_set_updated_at on public.admin_users;
+drop trigger if exists admin_users_set_updated_at; create trigger admin_users_set_updated_at
   before update on public.admin_users
   for each row execute function public.set_updated_at();
 
@@ -259,34 +265,40 @@ alter table public.order_items enable row level security;
 alter table public.admin_users enable row level security;
 
 -- products
-create policy public_read_active_products
+drop policy if exists public_read_active_products on public.products;
+drop policy if exists public_read_active_products; create policy public_read_active_products
   on public.products for select
   to anon, authenticated
   using (is_active = true);
 
-create policy admin_read_all_products
+drop policy if exists admin_read_all_products on public.products;
+drop policy if exists admin_read_all_products; create policy admin_read_all_products
   on public.products for select
   to authenticated
   using ((select public.is_admin()));
 
-create policy admin_insert_products
+drop policy if exists admin_insert_products on public.products;
+drop policy if exists admin_insert_products; create policy admin_insert_products
   on public.products for insert
   to authenticated
   with check ((select public.is_admin()));
 
-create policy admin_update_products
+drop policy if exists admin_update_products on public.products;
+drop policy if exists admin_update_products; create policy admin_update_products
   on public.products for update
   to authenticated
   using ((select public.is_admin()))
   with check ((select public.is_admin()));
 
-create policy admin_delete_products
+drop policy if exists admin_delete_products on public.products;
+drop policy if exists admin_delete_products; create policy admin_delete_products
   on public.products for delete
   to authenticated
   using ((select public.is_admin()));
 
 -- product_images
-create policy public_read_product_images
+drop policy if exists public_read_product_images on public.product_images;
+drop policy if exists public_read_product_images; create policy public_read_product_images
   on public.product_images for select
   to anon, authenticated
   using (
@@ -297,14 +309,16 @@ create policy public_read_product_images
     )
   );
 
-create policy admin_all_product_images
+drop policy if exists admin_all_product_images on public.product_images;
+drop policy if exists admin_all_product_images; create policy admin_all_product_images
   on public.product_images for all
   to authenticated
   using ((select public.is_admin()))
   with check ((select public.is_admin()));
 
 -- product_variants
-create policy public_read_product_variants
+drop policy if exists public_read_product_variants on public.product_variants;
+drop policy if exists public_read_product_variants; create policy public_read_product_variants
   on public.product_variants for select
   to anon, authenticated
   using (
@@ -315,36 +329,42 @@ create policy public_read_product_variants
     )
   );
 
-create policy admin_all_product_variants
+drop policy if exists admin_all_product_variants on public.product_variants;
+drop policy if exists admin_all_product_variants; create policy admin_all_product_variants
   on public.product_variants for all
   to authenticated
   using ((select public.is_admin()))
   with check ((select public.is_admin()));
 
 -- orders: admins manage, customers read their own
-create policy admin_read_orders
+drop policy if exists admin_read_orders on public.orders;
+drop policy if exists admin_read_orders; create policy admin_read_orders
   on public.orders for select
   to authenticated
   using ((select public.is_admin()));
 
-create policy admin_update_orders
+drop policy if exists admin_update_orders on public.orders;
+drop policy if exists admin_update_orders; create policy admin_update_orders
   on public.orders for update
   to authenticated
   using ((select public.is_admin()))
   with check ((select public.is_admin()));
 
-create policy customer_read_own_orders
+drop policy if exists customer_read_own_orders on public.orders;
+drop policy if exists customer_read_own_orders; create policy customer_read_own_orders
   on public.orders for select
   to authenticated
   using (customer_email = (select (auth.jwt() ->> 'email')));
 
 -- order_items: admins read all, customers read their own order's items
-create policy admin_read_order_items
+drop policy if exists admin_read_order_items on public.order_items;
+drop policy if exists admin_read_order_items; create policy admin_read_order_items
   on public.order_items for select
   to authenticated
   using ((select public.is_admin()));
 
-create policy customer_read_own_order_items
+drop policy if exists customer_read_own_order_items on public.order_items;
+drop policy if exists customer_read_own_order_items; create policy customer_read_own_order_items
   on public.order_items for select
   to authenticated
   using (
@@ -356,12 +376,14 @@ create policy customer_read_own_order_items
   );
 
 -- admin_users: self + admins
-create policy admin_read_own_record
+drop policy if exists admin_read_own_record on public.admin_users;
+drop policy if exists admin_read_own_record; create policy admin_read_own_record
   on public.admin_users for select
   to authenticated
   using (id = (select auth.uid()));
 
-create policy admin_read_admin_users
+drop policy if exists admin_read_admin_users on public.admin_users;
+drop policy if exists admin_read_admin_users; create policy admin_read_admin_users
   on public.admin_users for select
   to authenticated
   using ((select public.is_admin()));

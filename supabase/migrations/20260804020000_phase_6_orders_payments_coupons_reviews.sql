@@ -11,7 +11,7 @@ begin;
 -- order_measurements — custom-fit measurements per order
 -- ------------------------------------------------------------------
 
-create table public.order_measurements (
+create table if not exists public.order_measurements (
   id uuid primary key default gen_random_uuid(),
   order_id uuid not null unique references public.orders(id) on delete cascade,
   chest numeric(6, 2) not null check (chest >= 0),
@@ -24,7 +24,7 @@ create table public.order_measurements (
   updated_at timestamptz not null default now()
 );
 
-create trigger order_measurements_set_updated_at
+drop trigger if exists order_measurements_set_updated_at; create trigger order_measurements_set_updated_at
   before update on public.order_measurements
   for each row execute function public.set_updated_at();
 
@@ -32,7 +32,7 @@ create trigger order_measurements_set_updated_at
 -- order_status_history — audit trail for order status changes
 -- ------------------------------------------------------------------
 
-create table public.order_status_history (
+create table if not exists public.order_status_history (
   id uuid primary key default gen_random_uuid(),
   order_id uuid not null references public.orders(id) on delete cascade,
   old_status text,
@@ -43,9 +43,9 @@ create table public.order_status_history (
   updated_at timestamptz not null default now()
 );
 
-create index order_status_history_order_idx on public.order_status_history (order_id, created_at);
+create index if not exists order_status_history_order_idx on public.order_status_history (order_id, created_at);
 
-create trigger order_status_history_set_updated_at
+drop trigger if exists order_status_history_set_updated_at on public.order_status_history; drop trigger if exists order_status_history_set_updated_at; create trigger order_status_history_set_updated_at
   before update on public.order_status_history
   for each row execute function public.set_updated_at();
 
@@ -53,7 +53,7 @@ create trigger order_status_history_set_updated_at
 -- coupons
 -- ------------------------------------------------------------------
 
-create table public.coupons (
+create table if not exists public.coupons (
   id uuid primary key default gen_random_uuid(),
   code text not null unique check (code = upper(code)),
   description text,
@@ -73,7 +73,7 @@ create table public.coupons (
   )
 );
 
-create trigger coupons_set_updated_at
+drop trigger if exists coupons_set_updated_at on public.coupons; drop trigger if exists coupons_set_updated_at; create trigger coupons_set_updated_at
   before update on public.coupons
   for each row execute function public.set_updated_at();
 
@@ -92,16 +92,16 @@ begin
 end;
 $$;
 
-create index coupons_active_code_idx on public.coupons (code)
+create index if not exists coupons_active_code_idx on public.coupons (code)
   where is_active = true;
 
-create index coupons_created_at_idx on public.coupons (created_at desc);
+create index if not exists coupons_created_at_idx on public.coupons (created_at desc);
 
 -- ------------------------------------------------------------------
 -- coupon_usage — redemptions for usage-limit accounting
 -- ------------------------------------------------------------------
 
-create table public.coupon_usage (
+create table if not exists public.coupon_usage (
   id uuid primary key default gen_random_uuid(),
   coupon_id uuid not null references public.coupons(id) on delete cascade,
   order_id uuid references public.orders(id) on delete set null,
@@ -112,9 +112,9 @@ create table public.coupon_usage (
   constraint coupon_usage_order_unique unique (coupon_id, order_id)
 );
 
-create index coupon_usage_coupon_created_idx on public.coupon_usage (coupon_id, created_at);
+create index if not exists coupon_usage_coupon_created_idx on public.coupon_usage (coupon_id, created_at);
 
-create trigger coupon_usage_set_updated_at
+drop trigger if exists coupon_usage_set_updated_at; create trigger coupon_usage_set_updated_at
   before update on public.coupon_usage
   for each row execute function public.set_updated_at();
 
@@ -122,7 +122,7 @@ create trigger coupon_usage_set_updated_at
 -- reviews
 -- ------------------------------------------------------------------
 
-create table public.reviews (
+create table if not exists public.reviews (
   id uuid primary key default gen_random_uuid(),
   product_id uuid not null references public.products(id) on delete cascade,
   customer_name text not null,
@@ -138,19 +138,19 @@ create table public.reviews (
   constraint reviews_product_customer_unique unique (product_id, customer_email)
 );
 
-create trigger reviews_set_updated_at
+drop trigger if exists reviews_set_updated_at on public.reviews; drop trigger if exists reviews_set_updated_at; create trigger reviews_set_updated_at
   before update on public.reviews
   for each row execute function public.set_updated_at();
 
-create index reviews_approved_created_idx on public.reviews (product_id, is_approved, created_at desc);
-create index reviews_featured_idx on public.reviews (is_approved, is_featured, created_at desc);
-create index reviews_created_at_idx on public.reviews (created_at desc);
+create index if not exists reviews_approved_created_idx on public.reviews (product_id, is_approved, created_at desc);
+create index if not exists reviews_featured_idx on public.reviews (is_approved, is_featured, created_at desc);
+create index if not exists reviews_created_at_idx on public.reviews (created_at desc);
 
 -- ------------------------------------------------------------------
 -- order_notifications — idempotent outbound notification log
 -- ------------------------------------------------------------------
 
-create table public.order_notifications (
+create table if not exists public.order_notifications (
   id uuid primary key default gen_random_uuid(),
   order_id uuid not null references public.orders(id) on delete cascade,
   customer_phone text,
@@ -164,7 +164,7 @@ create table public.order_notifications (
   updated_at timestamptz not null default now()
 );
 
-create trigger order_notifications_set_updated_at
+drop trigger if exists order_notifications_set_updated_at on public.order_notifications; drop trigger if exists order_notifications_set_updated_at; create trigger order_notifications_set_updated_at
   before update on public.order_notifications
   for each row execute function public.set_updated_at();
 
@@ -172,7 +172,7 @@ create unique index order_notifications_sent_unique
   on public.order_notifications (order_id, type)
   where status = 'sent';
 
-create index order_notifications_created_idx on public.order_notifications (created_at desc);
+create index if not exists order_notifications_created_idx on public.order_notifications (created_at desc);
 
 -- ------------------------------------------------------------------
 -- Row Level Security
@@ -186,59 +186,59 @@ alter table public.reviews enable row level security;
 alter table public.order_notifications enable row level security;
 
 -- order_measurements — admin only (measurements are private)
-create policy admin_read_order_measurements
+drop policy if exists admin_read_order_measurements; create policy admin_read_order_measurements
   on public.order_measurements for select
   to authenticated
   using ((select public.is_admin()));
 
 -- order_status_history — admin read
-create policy admin_read_order_status_history
+drop policy if exists admin_read_order_status_history; create policy admin_read_order_status_history
   on public.order_status_history for select
   to authenticated
   using ((select public.is_admin()));
 
 -- coupons — admin manage only (public validation happens via service role)
-create policy admin_read_coupons
+drop policy if exists admin_read_coupons; create policy admin_read_coupons
   on public.coupons for select
   to authenticated
   using ((select public.is_admin()));
 
-create policy admin_insert_coupons
+drop policy if exists admin_insert_coupons; create policy admin_insert_coupons
   on public.coupons for insert
   to authenticated
   with check ((select public.is_admin()));
 
-create policy admin_update_coupons
+drop policy if exists admin_update_coupons; create policy admin_update_coupons
   on public.coupons for update
   to authenticated
   using ((select public.is_admin()))
   with check ((select public.is_admin()));
 
-create policy admin_delete_coupons
+drop policy if exists admin_delete_coupons; create policy admin_delete_coupons
   on public.coupons for delete
   to authenticated
   using ((select public.is_admin()));
 
 -- coupon_usage — admin read
-create policy admin_read_coupon_usage
+drop policy if exists admin_read_coupon_usage; create policy admin_read_coupon_usage
   on public.coupon_usage for select
   to authenticated
   using ((select public.is_admin()));
 
 -- reviews — public can read approved reviews; admins manage all
-create policy public_read_approved_reviews
+drop policy if exists public_read_approved_reviews; create policy public_read_approved_reviews
   on public.reviews for select
   to anon, authenticated
   using (is_approved = true);
 
-create policy admin_all_reviews
+drop policy if exists admin_all_reviews; create policy admin_all_reviews
   on public.reviews for all
   to authenticated
   using ((select public.is_admin()))
   with check ((select public.is_admin()));
 
 -- order_notifications — admin read
-create policy admin_read_order_notifications
+drop policy if exists admin_read_order_notifications; create policy admin_read_order_notifications
   on public.order_notifications for select
   to authenticated
   using ((select public.is_admin()));

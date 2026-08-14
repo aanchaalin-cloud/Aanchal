@@ -12,7 +12,7 @@
 
 begin;
 
-create table public.homepage_sections (
+create table if not exists public.homepage_sections (
   id uuid primary key default gen_random_uuid(),
   section_key text not null unique,
   title text not null,
@@ -23,10 +23,10 @@ create table public.homepage_sections (
   updated_at timestamptz not null default now()
 );
 
-create index homepage_sections_active_sort_idx
+create index if not exists homepage_sections_active_sort_idx
   on public.homepage_sections (is_active asc, sort_order asc);
 
-create trigger homepage_sections_set_updated_at
+drop trigger if exists homepage_sections_set_updated_at; create trigger homepage_sections_set_updated_at
   before update on public.homepage_sections
   for each row execute function public.set_updated_at();
 
@@ -203,12 +203,12 @@ on conflict (section_key) do nothing;
 alter table public.homepage_sections enable row level security;
 
 -- Anyone can read homepage sections (marketing content).
-create policy homepage_sections_read_all
+drop policy if exists homepage_sections_read_all; create policy homepage_sections_read_all
   on public.homepage_sections for select
   using (true);
 
 -- Admins can manage sections (API layer also enforces requireAdmin()).
-create policy homepage_sections_admin_all
+drop policy if exists homepage_sections_admin_all; create policy homepage_sections_admin_all
   on public.homepage_sections for all
   using ((select public.is_admin()));
 

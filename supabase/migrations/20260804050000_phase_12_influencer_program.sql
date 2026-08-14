@@ -12,7 +12,7 @@ begin;
 -- influencer_profiles
 -- ------------------------------------------------------------------
 
-create table public.influencer_profiles (
+create table if not exists public.influencer_profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   status text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
   referral_code text unique,
@@ -26,14 +26,14 @@ create table public.influencer_profiles (
   updated_at timestamptz not null default now()
 );
 
-create trigger influencer_profiles_set_updated_at
+drop trigger if exists influencer_profiles_set_updated_at; create trigger influencer_profiles_set_updated_at
   before update on public.influencer_profiles
   for each row execute function public.set_updated_at();
 
-create index influencer_profiles_status_created_idx
+create index if not exists influencer_profiles_status_created_idx
   on public.influencer_profiles (status, created_at desc);
 
-create index influencer_profiles_referral_code_idx
+create index if not exists influencer_profiles_referral_code_idx
   on public.influencer_profiles (referral_code)
   where referral_code is not null;
 
@@ -41,7 +41,7 @@ create index influencer_profiles_referral_code_idx
 -- influencer_earnings — commission ledger
 -- ------------------------------------------------------------------
 
-create table public.influencer_earnings (
+create table if not exists public.influencer_earnings (
   id uuid primary key default gen_random_uuid(),
   influencer_id uuid not null references public.influencer_profiles(id) on delete cascade,
   order_id uuid not null unique references public.orders(id) on delete cascade,
@@ -53,10 +53,10 @@ create table public.influencer_earnings (
   updated_at timestamptz not null default now()
 );
 
-create index influencer_earnings_influencer_created_idx
+create index if not exists influencer_earnings_influencer_created_idx
   on public.influencer_earnings (influencer_id, created_at desc);
 
-create trigger influencer_earnings_set_updated_at
+drop trigger if exists influencer_earnings_set_updated_at; create trigger influencer_earnings_set_updated_at
   before update on public.influencer_earnings
   for each row execute function public.set_updated_at();
 
@@ -114,25 +114,25 @@ alter table public.influencer_profiles enable row level security;
 alter table public.influencer_earnings enable row level security;
 
 -- influencer_profiles — admin manage; owner reads own status
-create policy admin_all_influencer_profiles
+drop policy if exists admin_all_influencer_profiles; create policy admin_all_influencer_profiles
   on public.influencer_profiles for all
   to authenticated
   using ((select public.is_admin()))
   with check ((select public.is_admin()));
 
-create policy customer_read_own_influencer_profile
+drop policy if exists customer_read_own_influencer_profile; create policy customer_read_own_influencer_profile
   on public.influencer_profiles for select
   to authenticated
   using (id = (select auth.uid()));
 
 -- influencer_earnings — admin manage; owner reads own earnings
-create policy admin_all_influencer_earnings
+drop policy if exists admin_all_influencer_earnings; create policy admin_all_influencer_earnings
   on public.influencer_earnings for all
   to authenticated
   using ((select public.is_admin()))
   with check ((select public.is_admin()));
 
-create policy customer_read_own_influencer_earnings
+drop policy if exists customer_read_own_influencer_earnings; create policy customer_read_own_influencer_earnings
   on public.influencer_earnings for select
   to authenticated
   using (influencer_id = (select auth.uid()));

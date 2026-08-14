@@ -9,7 +9,7 @@
 
 begin;
 
-create table public.categories (
+create table if not exists public.categories (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   slug text not null unique,
@@ -21,10 +21,10 @@ create table public.categories (
   updated_at timestamptz not null default now()
 );
 
-create index categories_active_sort_idx
+create index if not exists categories_active_sort_idx
   on public.categories (is_active, sort_order asc, name asc);
 
-create trigger categories_set_updated_at
+drop trigger if exists categories_set_updated_at; create trigger categories_set_updated_at
   before update on public.categories
   for each row execute function public.set_updated_at();
 
@@ -61,12 +61,12 @@ where not exists (select 1 from public.categories);
 alter table public.categories enable row level security;
 
 -- Anyone can read active categories (catalog data).
-create policy categories_read_active
+drop policy if exists categories_read_active; create policy categories_read_active
   on public.categories for select
   using (is_active = true);
 
 -- Admins can manage categories (API layer also enforces requireAdmin()).
-create policy categories_admin_all
+drop policy if exists categories_admin_all; create policy categories_admin_all
   on public.categories for all
   using ((select public.is_admin()));
 

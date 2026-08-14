@@ -52,7 +52,7 @@ create unique index orders_paytm_order_idx
   on public.orders (paytm_order_id)
   where paytm_order_id is not null;
 
-create index orders_shiprocket_shipment_idx
+create index if not exists orders_shiprocket_shipment_idx
   on public.orders (shiprocket_shipment_id)
   where shiprocket_shipment_id is not null;
 

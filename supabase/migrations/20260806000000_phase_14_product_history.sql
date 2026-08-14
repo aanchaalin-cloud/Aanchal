@@ -12,7 +12,7 @@ begin;
 -- product_history
 -- ------------------------------------------------------------------
 
-create table public.product_history (
+create table if not exists public.product_history (
   id uuid primary key default gen_random_uuid(),
   customer_id uuid not null references public.customers(id) on delete cascade,
   product_id uuid not null references public.products(id) on delete cascade,
@@ -22,13 +22,13 @@ create table public.product_history (
   constraint product_history_customer_product_unique unique (customer_id, product_id)
 );
 
-create index product_history_customer_viewed_idx
+create index if not exists product_history_customer_viewed_idx
   on public.product_history (customer_id, viewed_at desc);
 
-create index product_history_product_idx
+create index if not exists product_history_product_idx
   on public.product_history (product_id);
 
-create trigger product_history_set_updated_at
+drop trigger if exists product_history_set_updated_at; create trigger product_history_set_updated_at
   before update on public.product_history
   for each row execute function public.set_updated_at();
 
@@ -39,24 +39,24 @@ create trigger product_history_set_updated_at
 alter table public.product_history enable row level security;
 
 -- customer — self-service: select/insert/update own history (upsert path)
-create policy customer_select_own_product_history
+drop policy if exists customer_select_own_product_history; create policy customer_select_own_product_history
   on public.product_history for select
   to authenticated
   using (customer_id = (select auth.uid()));
 
-create policy customer_insert_own_product_history
+drop policy if exists customer_insert_own_product_history; create policy customer_insert_own_product_history
   on public.product_history for insert
   to authenticated
   with check (customer_id = (select auth.uid()));
 
-create policy customer_update_own_product_history
+drop policy if exists customer_update_own_product_history; create policy customer_update_own_product_history
   on public.product_history for update
   to authenticated
   using (customer_id = (select auth.uid()))
   with check (customer_id = (select auth.uid()));
 
 -- admin — read all history
-create policy admin_read_product_history
+drop policy if exists admin_read_product_history; create policy admin_read_product_history
   on public.product_history for select
   to authenticated
   using ((select public.is_admin()));

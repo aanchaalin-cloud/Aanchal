@@ -67,7 +67,7 @@ create policy "Admin delete review-images"
 -- review_images table
 -- ------------------------------------------------------------------
 
-create table public.review_images (
+create table if not exists public.review_images (
   id uuid primary key default gen_random_uuid(),
   review_id uuid not null references public.reviews(id) on delete cascade,
   url text not null,
@@ -75,15 +75,15 @@ create table public.review_images (
   updated_at timestamptz not null default now()
 );
 
-create index review_images_review_id_idx on public.review_images (review_id);
+create index if not exists review_images_review_id_idx on public.review_images (review_id);
 
-create trigger review_images_set_updated_at
+drop trigger if exists review_images_set_updated_at; create trigger review_images_set_updated_at
   before update on public.review_images
   for each row execute function public.set_updated_at();
 
 alter table public.review_images enable row level security;
 
-create policy public_read_review_images
+drop policy if exists public_read_review_images; create policy public_read_review_images
   on public.review_images for select
   to anon, authenticated
   using (
@@ -94,7 +94,7 @@ create policy public_read_review_images
     )
   );
 
-create policy admin_all_review_images
+drop policy if exists admin_all_review_images; create policy admin_all_review_images
   on public.review_images for all
   to authenticated
   using ((select public.is_admin()))
