@@ -98,17 +98,39 @@ function chargeablePaise(order: {
  * WhatsApp link so the client can redirect the customer straight to WhatsApp
  * with the full message pre-filled. The message is always built from the saved
  * order row (single source of truth is the DB, not the browser).
+ *
+ * Wrapped in try-catch: if the confirmation message building or token signing
+ * fails for any reason, the order is still saved — we return the order with a
+ * null URL so the client can fall back to the order-success status page.
  */
 async function whatsappResponseData(order: { id: string; order_number?: string | null }) {
-  const confirmation = await buildWhatsAppConfirmationForOrder(order.id);
-  return {
-    orderId: order.id,
-    orderNumber: order.order_number,
-    confirmationMethod: "whatsapp" as const,
-    statusToken: createOrderStatusToken(order.id, ""),
-    whatsappUrl: confirmation?.whatsappUrl ?? null,
-    whatsappMessage: confirmation?.message ?? null,
-  };
+  try {
+    const [confirmation, token] = await Promise.all([
+      buildWhatsAppConfirmationForOrder(order.id).catch((err) => {
+        console.error("[create-order] WhatsApp confirmation build failed:", err);
+        return null;
+      }),
+      createOrderStatusToken(order.id, ""),
+    ]);
+    return {
+      orderId: order.id,
+      orderNumber: order.order_number,
+      confirmationMethod: "whatsapp" as const,
+      statusToken: token,
+      whatsappUrl: confirmation?.whatsappUrl ?? null,
+      whatsappMessage: confirmation?.message ?? null,
+    };
+  } catch (err) {
+    console.error("[create-order] whatsappResponseData fatal:", err);
+    return {
+      orderId: order.id,
+      orderNumber: order.order_number,
+      confirmationMethod: "whatsapp" as const,
+      statusToken: createOrderStatusToken(order.id, ""),
+      whatsappUrl: null,
+      whatsappMessage: null,
+    };
+  }
 }
 
 /**
@@ -245,6 +267,18 @@ async function releaseRewardVoucher(
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  try {
+    return await handleCheckout(request);
+  } catch (err) {
+    console.error("[create-order] Unhandled error:", err);
+    return NextResponse.json(
+      { success: false, error: "Something went wrong. Please try again." },
+      { status: 500 },
+    );
+  }
+}
+
+async function handleCheckout(request: NextRequest): Promise<NextResponse> {
   const data = await validateRequest(request, checkoutSchema);
   if (data instanceof NextResponse) return data;
 

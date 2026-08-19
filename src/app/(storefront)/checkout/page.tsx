@@ -7,19 +7,13 @@ import { formatPrice } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { StorefrontEmptyState } from "@/components/ui/StorefrontState";
 import MeasurementForm from "@/components/checkout/MeasurementForm";
-import type { CheckoutFormData, MeasurementData, RazorpayOrderResponse } from "@/types";
+import type { CheckoutFormData, MeasurementData } from "@/types";
 import { Messages } from "@/lib/messages";
 import {
-  User, MapPin, Ruler, CreditCard, Check, ArrowLeft,
-  Tag, ShoppingBag, Truck, BadgePercent, Megaphone
+  User, MapPin, Ruler, Check, ArrowLeft,
+  Tag, ShoppingBag, Truck, BadgePercent, Megaphone,
+  MessageCircle
 } from "lucide-react";
-
-declare global {
-  interface Window {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    Razorpay: any;
-  }
-}
 
 const INDIAN_STATES = [
   "Andhra Pradesh","Arunachal Pradesh","Assam","Bihar","Chhattisgarh",
@@ -30,18 +24,10 @@ const INDIAN_STATES = [
   "Delhi","Jammu & Kashmir","Ladakh","Puducherry","Chandigarh",
 ];
 
-// Phase 1 launch: online payment is disabled. Customers confirm orders on
-// WhatsApp, and the owner confirms them manually. WhatsApp mode is the DEFAULT
-// — it only switches to online payment when NEXT_PUBLIC_CHECKOUT_MODE=payment
-// is explicitly set, so a build that forgets the env never hits the payment
-// path (which needs real Razorpay/Paytm keys). The server enforces the same
-// flag, so the browser cannot opt out of the manual flow.
-const IS_WHATSAPP_MODE = process.env.NEXT_PUBLIC_CHECKOUT_MODE !== "payment";
-
 const STEPS = [
   { id: 1, label: "Information", icon: User },
   { id: 2, label: "Measurements", icon: Ruler },
-  { id: 3, label: IS_WHATSAPP_MODE ? "Confirm" : "Payment", icon: IS_WHATSAPP_MODE ? Check : CreditCard },
+  { id: 3, label: "Confirm", icon: Check },
 ];
 
 type FormErrors = Partial<Record<keyof CheckoutFormData | "chest" | "waist" | "full_height" | "shoulder", string>>;
@@ -97,7 +83,6 @@ export default function CheckoutPage() {
     unit: "inches",
     personalisation_request: "",
   });
-  const [paymentMethod, setPaymentMethod] = useState<"prepaid" | "cod">("prepaid");
   const [couponCode, setCouponCode] = useState("");
   const [couponDiscount, setCouponDiscount] = useState(0);
   const [couponApplied, setCouponApplied] = useState(false);
@@ -185,21 +170,7 @@ export default function CheckoutPage() {
   };
 
   const shippingFee = 0;
-  const discountedSubtotal = Math.max(0, displaySubtotal - couponDiscount);
-  const totalAmount = discountedSubtotal + shippingFee;
-  const prepaidAmount = paymentMethod === "cod" ? Math.ceil(totalAmount / 2) : totalAmount;
-  const codAmount = paymentMethod === "cod" ? totalAmount - prepaidAmount : 0;
-
-  const loadRazorpay = (): Promise<boolean> => {
-    return new Promise((resolve) => {
-      if (window.Razorpay) return resolve(true);
-      const script = document.createElement("script");
-      script.src = "https://checkout.razorpay.com/v1/checkout.js";
-      script.onload = () => resolve(true);
-      script.onerror = () => resolve(false);
-      document.body.appendChild(script);
-    });
-  };
+  const totalAmount = Math.max(0, displaySubtotal - couponDiscount) + shippingFee;
 
   const handleSubmit = async () => {
     setApiError(null);
@@ -216,8 +187,6 @@ export default function CheckoutPage() {
     const allErrors = { ...stepErrors, ...measureErrors };
     if (Object.keys(allErrors).length > 0) {
       setErrors(allErrors);
-      // Take the user to the step that actually has errors instead of always
-      // jumping back to step 1 (which would hide measurement errors).
       setStep(Object.keys(measureErrors).length > 0 ? 2 : 1);
       return;
     }
@@ -231,14 +200,7 @@ export default function CheckoutPage() {
         quantity: item.quantity,
       }));
 
-      // Deterministic idempotency key derived from everything that affects the
-      // order. Re-submitting identical checkout data reuses the SAME key (so
-      // the server resumes the pending order instead of duplicating it), while
-      // changing the payment method / coupon / referral / cart / measurements
-      // produces a fresh key — preventing a stale order from being charged the
-      // wrong amount after the customer changed their selection.
-      const idempotencyKey = `co-${[
-        IS_WHATSAPP_MODE ? "whatsapp" : paymentMethod,
+      const idempotencyKey = `co-whatsapp|${[
         couponApplied ? couponCode.trim().toUpperCase() : "",
         referralCode.trim().toUpperCase() || "",
         cartItems.map((i) => `${i.productId}:${i.variantId}:${i.quantity}`).join(","),
@@ -252,7 +214,6 @@ export default function CheckoutPage() {
         body: JSON.stringify({
           ...form,
           measurements,
-          payment_method: IS_WHATSAPP_MODE ? undefined : paymentMethod,
           coupon_code: couponApplied ? couponCode.trim() : undefined,
           referral_code: referralCode.trim() || undefined,
           cartItems,
@@ -268,112 +229,27 @@ export default function CheckoutPage() {
         return;
       }
 
-      const orderData = data.data as RazorpayOrderResponse & {
-        confirmationMethod?: "whatsapp";
-        orderNumber?: string | null;
+      const orderData = data.data as {
+        orderId: string;
+        statusToken: string;
+        confirmationMethod?: string;
         whatsappUrl?: string | null;
       };
 
-      const goToStatus = () => {
-        clearCart();
-        const params = new URLSearchParams({
-          orderId: orderData.orderId,
-          statusToken: orderData.statusToken,
-        });
-        router.push(`/order-success?${params.toString()}`);
-      };
+      clearCart();
 
-      // Phase 1: the order is created server-side and awaiting manual WhatsApp
-      // confirmation. Redirect the customer straight to WhatsApp with the
-      // custom message pre-filled. If the link is somehow missing, fall back to
-      // the order-success page (which also shows the message + open button).
-      if (orderData.confirmationMethod === "whatsapp") {
-        clearCart();
-        if (orderData.whatsappUrl) {
-          window.location.href = orderData.whatsappUrl;
-        } else {
-          goToStatus();
-        }
+      if (orderData.whatsappUrl) {
+        window.location.href = orderData.whatsappUrl;
         return;
       }
 
-      // Already paid in a previous attempt — go straight to the status page.
-      if (orderData.alreadyPaid) {
-        goToStatus();
-        return;
-      }
-
-      // Paytm — remember the pending order and redirect to Paytm WITHOUT
-      // clearing the cart (payment is not confirmed yet; an abandoned/declined
-      // payment must not destroy the cart). CartClearer on order-success
-      // clears it once the order is confirmed.
-      if (orderData.paymentGateway === "paytm" && orderData.paytm) {
-        try {
-          sessionStorage.setItem("aanchal_pending_order", orderData.orderId);
-        } catch {
-          // Non-fatal — cart simply survives until the next checkout.
-        }
-        window.location.href = orderData.paytm.redirectUrl;
-        return;
-      }
-
-      const razorpayLoaded = await loadRazorpay();
-      if (!razorpayLoaded) {
-        setApiError(Messages.paymentNotConfigured);
-        setLoading(false);
-        return;
-      }
-
-      const rzp = new window.Razorpay({
-        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
-        amount: orderData.amount,
-        currency: orderData.currency,
-        name: "Aanchal",
-        description: "Order Payment",
-        order_id: orderData.razorpayOrderId,
-        prefill: {
-          name: orderData.customerName,
-          email: orderData.customerEmail,
-          contact: orderData.customerPhone,
-        },
-        theme: { color: "#95271D" },
-        handler: async (response: {
-          razorpay_order_id: string;
-          razorpay_payment_id: string;
-          razorpay_signature: string;
-        }) => {
-          const verifyRes = await fetch("/api/checkout/verify-payment", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              orderId: orderData.orderId,
-              razorpayOrderId: response.razorpay_order_id,
-              razorpayPaymentId: response.razorpay_payment_id,
-              razorpaySignature: response.razorpay_signature,
-            }),
-          });
-
-          const verifyData = await verifyRes.json();
-
-          if (verifyData.success) {
-            goToStatus();
-          } else {
-            setApiError(verifyData.error ?? Messages.paymentVerificationFailed);
-          }
-          setLoading(false);
-        },
-        modal: {
-          ondismiss: () => { setLoading(false); },
-        },
+      const params = new URLSearchParams({
+        orderId: orderData.orderId,
+        statusToken: orderData.statusToken,
       });
-
-      rzp.on("payment.failed", () => {
-        setApiError(Messages.paymentError);
-        setLoading(false);
-      });
-
-      rzp.open();
-    } catch {
+      router.push(`/order-success?${params.toString()}`);
+    } catch (err) {
+      console.error("[checkout] Submit error:", err);
       setApiError(Messages.somethingWentWrong);
       setLoading(false);
     }
@@ -495,55 +371,23 @@ export default function CheckoutPage() {
             {/* STEP 3: Review & Confirm */}
             {step === 3 && (
               <>
-                {/* Payment */}
                 <section className="bg-white rounded-sm border border-[#E5D5C5]/50 p-6">
-                  {IS_WHATSAPP_MODE ? (
-                    <>
-                      <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-widest text-[#1C1C1C]">
-                        <CreditCard className="h-4 w-4 text-[#95271D]" />
-                        Payment
-                      </h2>
-                      <div className="rounded-sm bg-[#FFF0E8] p-4">
-                        <p className="text-sm text-[#1C1C1C]">
-                          No payment is taken on the website right now.
-                        </p>
-                        <p className="mt-1 text-xs text-[#6B6B6B]">
-                          Payment will be confirmed separately by Aanchal after your
-                          order is confirmed on WhatsApp.
-                        </p>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-widest text-[#1C1C1C]">
-                        <CreditCard className="h-4 w-4 text-[#95271D]" />
-                        Payment Method
-                      </h2>
-                      <div className="space-y-3">
-                        <PaymentOption
-                          selected={paymentMethod === "prepaid"}
-                          onClick={() => setPaymentMethod("prepaid")}
-                          title="Full Prepaid"
-                          subtitle="Pay 100% online now"
-                          badge="5% OFF"
-                          badgeColor="bg-green-100 text-green-800"
-                          savings={`Save ${formatPrice(Math.round(displaySubtotal * 0.05))}`}
-                        />
-                        <PaymentOption
-                          selected={paymentMethod === "cod"}
-                          onClick={() => setPaymentMethod("cod")}
-                          title="50% Prepaid + 50% COD"
-                          subtitle="Pay half now, half on delivery"
-                          badge="COD"
-                          badgeColor="bg-orange-100 text-orange-800"
-                          savings={`Pay ${formatPrice(Math.ceil(totalAmount / 2))} now`}
-                        />
-                      </div>
-                    </>
-                  )}
+                  <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-widest text-[#1C1C1C]">
+                    <MessageCircle className="h-4 w-4 text-[#25D366]" />
+                    Confirm on WhatsApp
+                  </h2>
+                  <div className="rounded-sm bg-[#FFF0E8] p-4">
+                    <p className="text-sm text-[#1C1C1C]">
+                      After confirming, you&apos;ll be redirected to WhatsApp with your
+                      full order details pre-filled. Send the message to us and our
+                      team will confirm your order.
+                    </p>
+                    <p className="mt-1 text-xs text-[#6B6B6B]">
+                      Payment will be arranged separately after confirmation.
+                    </p>
+                  </div>
                 </section>
 
-                {/* Order Summary */}
                 <section className="bg-white rounded-sm border border-[#E5D5C5]/50 p-6">
                   <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-widest text-[#1C1C1C]">
                     <ShoppingBag className="h-4 w-4 text-[#95271D]" />
@@ -582,28 +426,10 @@ export default function CheckoutPage() {
                       <span className="flex items-center gap-1"><Truck className="h-3 w-3" /> Shipping</span>
                       <span className="font-medium text-[#800020]">{shippingFee === 0 ? "Free" : formatPrice(shippingFee)}</span>
                     </div>
-                    {paymentMethod === "prepaid" && !IS_WHATSAPP_MODE && displaySubtotal > 0 && (
-                      <div className="flex justify-between text-green-600">
-                        <span>Prepaid discount (5%)</span>
-                        <span>-{formatPrice(Math.round(totalAmount * 0.05))}</span>
-                      </div>
-                    )}
                     <div className="border-t border-[#E5D5C5]/50 pt-2 flex justify-between font-semibold text-[#1C1C1C]">
                       <span>Total</span>
-                      <span>{formatPrice(IS_WHATSAPP_MODE ? totalAmount : (paymentMethod === "prepaid" ? Math.round(totalAmount * 0.95) : totalAmount))}</span>
+                      <span>{formatPrice(totalAmount)}</span>
                     </div>
-                    {paymentMethod === "cod" && (
-                      <div className="space-y-1 text-xs">
-                        <div className="flex justify-between text-[#6B6B6B]">
-                          <span>Pay now (50%)</span>
-                          <span className="font-medium text-[#1C1C1C]">{formatPrice(prepaidAmount)}</span>
-                        </div>
-                        <div className="flex justify-between text-orange-600">
-                          <span>Due on delivery (50%)</span>
-                          <span className="font-medium">{formatPrice(codAmount)}</span>
-                        </div>
-                      </div>
-                    )}
                   </div>
 
                   <div className="mt-3 rounded-sm bg-[#FFF0E8] p-3">
@@ -640,16 +466,14 @@ export default function CheckoutPage() {
                 </Button>
               ) : (
                 <Button type="submit" loading={loading} disabled={items.length === 0}>
-                  {loading
-                    ? IS_WHATSAPP_MODE ? "Preparing your order…" : "Processing..."
-                    : IS_WHATSAPP_MODE ? "Confirm Order" : paymentMethod === "cod" ? "Place Order" : "Pay Securely"}
+                  {loading ? "Preparing your order..." : "Confirm Order"}
                 </Button>
               )}
             </div>
-            {step === 3 && IS_WHATSAPP_MODE && (
+            {step === 3 && (
               <p className="text-center text-xs text-[#6B6B6B]">
-                No payment is taken here. After confirming, you&apos;ll be asked to send your
-                order on WhatsApp — our team will confirm it manually.
+                No payment is taken here. You&apos;ll be redirected to WhatsApp to confirm
+                your order — our team will verify and confirm it manually.
               </p>
             )}
           </div>
@@ -763,45 +587,5 @@ function Field({ label, name, value, onChange, error, type = "text", placeholder
         className={`w-full rounded border bg-white px-3 py-2 text-sm text-[#1C1C1C] placeholder:text-[#6B6B6B]/80 focus:outline-none focus:ring-2 focus:ring-[#95271D] ${error ? "border-[#C41E3A]" : "border-[#E5D5C5]"}`} />
       {error && <p className="mt-1 text-xs text-[#C41E3A]">{error}</p>}
     </div>
-  );
-}
-
-type PaymentOptionProps = {
-  selected: boolean;
-  onClick: () => void;
-  title: string;
-  subtitle: string;
-  badge: string;
-  badgeColor: string;
-  savings: string;
-};
-
-function PaymentOption({ selected, onClick, title, subtitle, badge, badgeColor, savings }: PaymentOptionProps) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`w-full rounded-sm border p-4 text-left transition-colors ${
-        selected
-          ? "border-[#95271D] bg-[#95271D]/5"
-          : "border-[#E5D5C5] hover:border-[#95271D]/50"
-      }`}
-    >
-      <div className="flex items-start justify-between">
-        <div className="flex items-start gap-3">
-          <div className={`mt-0.5 h-4 w-4 rounded-full border-2 flex items-center justify-center ${
-            selected ? "border-[#95271D]" : "border-[#E5D5C5]"
-          }`}>
-            {selected && <div className="h-2 w-2 rounded-full bg-[#95271D]" />}
-          </div>
-          <div>
-            <p className="text-sm font-medium text-[#1C1C1C]">{title}</p>
-            <p className="text-xs text-[#6B6B6B]">{subtitle}</p>
-            <p className="mt-1 text-xs text-[#6B6B6B]">{savings}</p>
-          </div>
-        </div>
-        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${badgeColor}`}>{badge}</span>
-      </div>
-    </button>
   );
 }
