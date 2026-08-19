@@ -4,8 +4,9 @@ import { useRouter, usePathname } from "next/navigation";
 
 const PAYMENT_STATUSES = ["all", "pending", "partially_paid", "paid", "failed", "refunded", "partially_refunded"];
 const ORDER_STATUSES = [
-  "all", "pending", "confirmed", "in_production", "quality_check", "ready_to_ship",
-  "shipped", "out_for_delivery", "delivered", "cancelled", "returned", "failed",
+  "all", "pending", "confirmed", "in_production", "ready_to_ship",
+  "shipped", "out_for_delivery", "delivered", "cancelled", "return_requested",
+  "returned", "refunded",
 ];
 
 const labelize = (s: string) => (s === "all" ? "All" : s.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" "));

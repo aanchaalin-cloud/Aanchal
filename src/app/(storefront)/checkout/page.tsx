@@ -238,11 +238,10 @@ export default function CheckoutPage() {
 
       clearCart();
 
-      if (orderData.whatsappUrl) {
-        window.location.href = orderData.whatsappUrl;
-        return;
-      }
-
+      // Always go to the order-success page — it renders the WhatsApp
+      // confirmation card (Open WhatsApp + Copy buttons) plus the order
+      // details. If WhatsApp doesn't open (desktop, no app), the customer
+      // still sees their order number and can copy the message.
       const params = new URLSearchParams({
         orderId: orderData.orderId,
         statusToken: orderData.statusToken,

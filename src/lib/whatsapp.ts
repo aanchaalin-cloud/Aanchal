@@ -118,7 +118,7 @@ export function buildWhatsAppOrderMessage(order: WhatsAppOrderSummary): string {
     lines.push(`Chest: ${m.chest} in`);
     lines.push(`Waist: ${m.waist} in`);
     lines.push(`Height: ${formatHeight(m.unit, m.fullHeight)}`);
-    if (m.shoulder) lines.push(`Shoulder: ${m.shoulder} in`);
+    if (m.shoulder != null) lines.push(`Shoulder: ${m.shoulder} in`);
     if (m.personalisationRequest && m.personalisationRequest.trim()) {
       lines.push(`Additional request: ${m.personalisationRequest.trim()}`);
     }
