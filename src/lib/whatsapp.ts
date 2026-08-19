@@ -89,7 +89,7 @@ export type WhatsAppOrderSummary = {
 export function buildWhatsAppOrderMessage(order: WhatsAppOrderSummary): string {
   const lines: string[] = [];
 
-  lines.push("Hello Aanchal! 🌸");
+  lines.push("Hello Aanchal!");
   lines.push("");
   lines.push("I would like to place my order and confirm it on WhatsApp.");
   lines.push("");
@@ -161,7 +161,7 @@ export function buildWhatsAppOrderMessage(order: WhatsAppOrderSummary): string {
   lines.push("");
   lines.push("Please confirm my order.");
   lines.push("");
-  lines.push("Thank you! ❤️");
+  lines.push("Thank you!");
 
   return lines.join("\n");
 }

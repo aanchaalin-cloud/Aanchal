@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "node:crypto";
-import Razorpay from "razorpay";
 import { createServiceClient } from "@/lib/supabase/server";
 import { checkoutSchema } from "@/lib/validations";
 import { rupeesToPaise } from "@/lib/utils";
@@ -8,15 +7,6 @@ import { createOrderStatusToken } from "@/lib/orders/public-status";
 import { Messages } from "@/lib/messages";
 import { validateRequest } from "@/lib/api-utils";
 import { getCheckoutMode } from "@/lib/env";
-import {
-  getPaytmConfig,
-  initiateTransaction,
-  buildPaytmOrderId,
-  getProcessTransactionUrl,
-  type PaytmConfig,
-} from "@/lib/paytm";
-import { getProviderAdapter } from "@/lib/payments";
-import { INFLUENCER_COMMISSION_RATE } from "@/lib/orders/influencer-earnings";
 import { getPrimaryStorefrontImage } from "@/lib/product-images";
 import { buildWhatsAppConfirmationForOrder } from "@/lib/orders/whatsapp-confirmation";
 
@@ -24,10 +14,11 @@ const SHIPPING_FEE = 0;
 const PREPAID_DISCOUNT_RATE = 0.05;
 const INFLUENCER_DISCOUNT_CAP = 500;
 
-// Idempotency keys arrive as a raw composite string from the checkout page.
-// Normalize to a fixed-length hash so the stored value is uniform, bounded and
-// safe to match exactly on resume. Re-submitting identical inputs recomputes
-// the same hash, so deduplication still works.
+/** Round to 2 decimal places using toFixed to avoid JS floating-point drift. */
+function round2(n: number): number {
+  return Number(n.toFixed(2));
+}
+
 function normalizeIdempotencyKey(raw: string | null | undefined): string | null {
   if (!raw) return null;
   return crypto.createHash("sha256").update(`co:${raw}`).digest("hex");
@@ -82,7 +73,6 @@ function checkoutResponseData(
   };
 }
 
-/** Amount (in paise) the customer must pay online now. */
 function chargeablePaise(order: {
   payment_method: string;
   total_amount: number;
@@ -93,16 +83,6 @@ function chargeablePaise(order: {
   );
 }
 
-/**
- * Response for a Phase 1 WhatsApp order. Returns the order id + the prepared
- * WhatsApp link so the client can redirect the customer straight to WhatsApp
- * with the full message pre-filled. The message is always built from the saved
- * order row (single source of truth is the DB, not the browser).
- *
- * Wrapped in try-catch: if the confirmation message building or token signing
- * fails for any reason, the order is still saved — we return the order with a
- * null URL so the client can fall back to the order-success status page.
- */
 async function whatsappResponseData(order: { id: string; order_number?: string | null }) {
   try {
     const [confirmation, token] = await Promise.all([
@@ -134,15 +114,16 @@ async function whatsappResponseData(order: { id: string; order_number?: string |
 }
 
 /**
- * Re-initiates payment for an existing pending order (idempotency resume /
- * retry). Returns a NextResponse JSON.
+ * Phase 2: Re-initiates payment for an existing pending order.
+ * Only called in non-WhatsApp mode, so payment module imports are safe here.
  */
 async function resumeCheckout(
   supabase: Awaited<ReturnType<typeof createServiceClient>>,
-  order: OrderRow,
-  paytmConfig: PaytmConfig | null
+  order: OrderRow
 ): Promise<NextResponse> {
   if (order.payment_status === "paid" || order.payment_status === "partially_paid") {
+    const { getPaytmConfig } = await import("@/lib/paytm");
+    const paytmConfig = getPaytmConfig();
     return NextResponse.json({
       success: true,
       data: checkoutResponseData(order, (paytmConfig ? "paytm" : "razorpay"), chargeablePaise(order), {
@@ -151,8 +132,11 @@ async function resumeCheckout(
     });
   }
 
-  // Razorpay fallback — create a fresh Razorpay order for the same charge.
+  const { getPaytmConfig } = await import("@/lib/paytm");
+  const paytmConfig = getPaytmConfig();
+
   if (!paytmConfig) {
+    const Razorpay = (await import("razorpay")).default;
     const razorpayKeyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
     const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
     if (!razorpayKeyId || !razorpayKeySecret) {
@@ -184,7 +168,7 @@ async function resumeCheckout(
     }
   }
 
-  // Paytm — a new attempt uses a fresh Paytm order id (single-use per attempt).
+  const { buildPaytmOrderId, initiateTransaction, getProcessTransactionUrl } = await import("@/lib/paytm");
   const previous = order.paytm_order_id?.match(/-(\d+)$/);
   const attempt = previous ? Number(previous[1]) + 1 : 2;
   const paytmOrderId = buildPaytmOrderId(order.id, attempt);
@@ -224,46 +208,44 @@ async function resumeCheckout(
   });
 }
 
-/**
- * Atomically claim a reward voucher (AANCHAL-*). Returns null if unusable.
- *
- * NOTE: used_by_order_id is intentionally NOT written here — it references
- * public.orders(id) (phase_20), and the order row does not exist yet at claim
- * time. Setting it here would fail the FK and break every redemption. The
- * caller stamps it on the voucher after the order row is created.
- */
 async function claimRewardVoucher(
   supabase: Awaited<ReturnType<typeof createServiceClient>>,
   code: string
 ): Promise<{ ok: true; value: number } | { ok: false; error: string }> {
-  const { data: claimed } = await supabase
-    .from("reward_vouchers")
-    .update({ is_used: true })
-    .eq("code", code)
-    .eq("is_used", false)
-    .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
-    .select("value")
-    .maybeSingle();
+  try {
+    const { data: claimed } = await supabase
+      .from("reward_vouchers")
+      .update({ is_used: true })
+      .eq("code", code)
+      .eq("is_used", false)
+      .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
+      .select("value")
+      .maybeSingle();
 
-  if (!claimed) {
-    return { ok: false, error: "This voucher has already been used or has expired." };
+    if (!claimed) {
+      return { ok: false, error: "This voucher has already been used or has expired." };
+    }
+    return { ok: true, value: Number(claimed.value) };
+  } catch (err) {
+    console.error("[create-order] claimRewardVoucher error:", err);
+    return { ok: false, error: "Unable to apply voucher. Please try again." };
   }
-  return { ok: true, value: Number(claimed.value) };
 }
 
-/**
- * Release a voucher claim when order creation fails (order deleted).
- */
 async function releaseRewardVoucher(
   supabase: Awaited<ReturnType<typeof createServiceClient>>,
   code: string | null
 ): Promise<void> {
   if (!code) return;
-  await supabase
-    .from("reward_vouchers")
-    .update({ is_used: false, used_by_order_id: null })
-    .eq("code", code)
-    .eq("is_used", true);
+  try {
+    await supabase
+      .from("reward_vouchers")
+      .update({ is_used: false, used_by_order_id: null })
+      .eq("code", code)
+      .eq("is_used", true);
+  } catch (err) {
+    console.error("[create-order] releaseRewardVoucher error:", err);
+  }
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -300,9 +282,6 @@ async function handleCheckout(request: NextRequest): Promise<NextResponse> {
     idempotency_key,
   } = data;
 
-  // Normalise to lowercase — every other email-based flow (track-order, cancel,
-  // rewards, coupon per-customer limits) compares lowercase, so storing the
-  // customer's raw casing would make orders unfindable.
   const customer_email = rawCustomerEmail.trim().toLowerCase();
 
   const cartItems = Array.from(
@@ -325,79 +304,99 @@ async function handleCheckout(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const paytmConfig = getPaytmConfig();
-  const paymentGateway: "paytm" | "razorpay" = paytmConfig ? "paytm" : "razorpay";
-
-  // Phase 1 launch flag: WhatsApp/manual confirmation instead of online payment.
-  // The server decides — the browser cannot opt out of the manual flow.
   const whatsappMode = getCheckoutMode() === "whatsapp";
-  const paymentMethod = payment_method ?? "prepaid";
+  const paymentMethod = payment_method ?? (whatsappMode ? "cod" : "prepaid");
 
-  const razorpayKeyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
-  const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
-  if (!whatsappMode && paymentGateway === "razorpay" && (!razorpayKeyId || !razorpayKeySecret)) {
-    console.error("[create-order] Payment credentials missing");
+  if (!whatsappMode) {
+    const razorpayKeyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+    const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
+    if (!razorpayKeyId || !razorpayKeySecret) {
+      console.error("[create-order] Payment credentials missing");
+      return NextResponse.json(
+        { success: false, error: Messages.paymentNotConfigured },
+        { status: 503 },
+      );
+    }
+  }
+
+  let supabase;
+  try {
+    supabase = await createServiceClient();
+  } catch (err) {
+    console.error("[create-order] Failed to create Supabase client:", err);
     return NextResponse.json(
-      { success: false, error: Messages.paymentNotConfigured },
+      { success: false, error: "Database connection unavailable. Please try again." },
       { status: 503 },
     );
   }
 
-  const supabase = await createServiceClient();
-
-  // Normalize the raw composite idempotency key once, then use the same value
-  // for both the resume lookup and the stored row.
   const normalizedIdempotencyKey = normalizeIdempotencyKey(idempotency_key);
 
   // ── Idempotency — resume an existing pending order for this key ──
   if (normalizedIdempotencyKey) {
-    const { data: existing } = await supabase
-      .from("orders")
-      .select(
-        "id, order_number, payment_status, payment_method, total_amount, prepaid_amount, cod_amount, discount_amount, customer_name, customer_email, customer_phone, paytm_order_id, razorpay_order_id, confirmation_method"
-      )
-      .eq("idempotency_key", normalizedIdempotencyKey)
-      .maybeSingle();
+    try {
+      const { data: existing, error: existingErr } = await supabase
+        .from("orders")
+        .select(
+          "id, order_number, payment_status, payment_method, total_amount, prepaid_amount, cod_amount, discount_amount, customer_name, customer_email, customer_phone, paytm_order_id, razorpay_order_id, confirmation_method"
+        )
+        .eq("idempotency_key", normalizedIdempotencyKey)
+        .maybeSingle();
 
-    if (existing) {
-      // Bind the resume to the email that created the order: the idempotency
-      // key is derived from the customer's own inputs, so a leaked/guessed key
-      // must not let someone read another customer's order details.
-      if (existing.customer_email?.toLowerCase() !== customer_email) {
-        return NextResponse.json(
-          { success: false, error: "This checkout session belongs to another customer." },
-          { status: 403 },
-        );
+      if (existingErr) {
+        console.error("[create-order] Idempotency lookup error:", existingErr.message);
       }
-      // Phase 1 WhatsApp orders never enter a payment gateway — resuming simply
-      // returns the same redirect to the order-success page.
-      if (existing.confirmation_method === "whatsapp") {
-        return NextResponse.json({
-          success: true,
-          data: await whatsappResponseData(existing as OrderRow),
-        });
+
+      if (existing) {
+        if (existing.customer_email?.toLowerCase() !== customer_email) {
+          return NextResponse.json(
+            { success: false, error: "This checkout session belongs to another customer." },
+            { status: 403 },
+          );
+        }
+        if (existing.confirmation_method === "whatsapp") {
+          return NextResponse.json({
+            success: true,
+            data: await whatsappResponseData(existing as OrderRow),
+          });
+        }
+        return resumeCheckout(supabase, existing as OrderRow);
       }
-      return resumeCheckout(supabase, existing as OrderRow, paytmConfig);
+    } catch (err) {
+      console.error("[create-order] Idempotency check failed:", err);
     }
   }
 
-  const razorpay = !whatsappMode && paymentGateway === "razorpay"
-    ? new Razorpay({ key_id: razorpayKeyId!, key_secret: razorpayKeySecret! })
-    : null;
-
   // ── Fetch products & build order items with server-side prices ──
   const productIds = [...new Set(cartItems.map((i) => i.productId))];
-  const { data: products } = await supabase
-    .from("products")
-    .select(
-      `
-      id, name, slug, price, discount_price, is_active,
-      product_images ( url, position ),
-      product_variants ( id, size, color, sku, stock, is_active )
-    `,
-    )
-    .in("id", productIds)
-    .eq("is_active", true);
+  let products: Array<{
+    id: string;
+    name: string;
+    slug: string;
+    price: number;
+    discount_price: number | null;
+    is_active: boolean;
+    product_images: Array<{ url: string; position: number }>;
+    product_variants: Array<{ id: string; size: string | null; color: string | null; sku: string | null; stock: number; is_active: boolean }>;
+  }> | null = null;
+
+  try {
+    const result = await supabase
+      .from("products")
+      .select(
+        `id, name, slug, price, discount_price, is_active,
+        product_images ( url, position ),
+        product_variants ( id, size, color, sku, stock, is_active )`,
+      )
+      .in("id", productIds)
+      .eq("is_active", true);
+    products = result.data;
+    if (result.error) {
+      console.error("[create-order] Product fetch error:", result.error.message);
+    }
+  } catch (err) {
+    console.error("[create-order] Product fetch exception:", err);
+  }
 
   if (!products) {
     return NextResponse.json(
@@ -419,7 +418,7 @@ async function handleCheckout(request: NextRequest): Promise<NextResponse> {
     quantity: number;
     line_total: number;
   }> = [];
-  let subtotal = 0;
+  let subtotalRaw = 0;
 
   for (const cartItem of cartItems) {
     const product = products.find((p) => p.id === cartItem.productId);
@@ -435,7 +434,7 @@ async function handleCheckout(request: NextRequest): Promise<NextResponse> {
         ? product.discount_price
         : product.price;
     const activeVariants = product.product_variants.filter(
-      (v: { is_active: boolean }) => v.is_active !== false,
+      (v) => v.is_active !== false,
     );
 
     let variantId: string | null = null;
@@ -444,7 +443,7 @@ async function handleCheckout(request: NextRequest): Promise<NextResponse> {
     let sku: string | null = null;
 
     if (cartItem.variantId) {
-      const variant = activeVariants.find((v: { id: string }) => v.id === cartItem.variantId);
+      const variant = activeVariants.find((v) => v.id === cartItem.variantId);
       if (!variant) {
         return NextResponse.json(
           { success: false, error: "Selected options unavailable", code: "VARIANT_NOT_FOUND" },
@@ -469,10 +468,10 @@ async function handleCheckout(request: NextRequest): Promise<NextResponse> {
     }
 
     const sortedImages = [...product.product_images].sort(
-      (a: { position: number }, b: { position: number }) => a.position - b.position,
+      (a, b) => a.position - b.position,
     );
-    const lineTotal = unitPrice * cartItem.quantity;
-    subtotal += lineTotal;
+    const lineTotal = round2(unitPrice * cartItem.quantity);
+    subtotalRaw += lineTotal;
 
     orderItemsPayload.push({
       product_id: product.id,
@@ -489,11 +488,9 @@ async function handleCheckout(request: NextRequest): Promise<NextResponse> {
     });
   }
 
-  // ── Shipping ──
   const shippingFee = SHIPPING_FEE;
-  const rawTotal = subtotal + shippingFee;
-
-  // ── Generate the local order id first — needed for atomic voucher claims ──
+  const subtotal = round2(subtotalRaw);
+  const rawTotal = round2(subtotal + shippingFee);
   const orderId = crypto.randomUUID();
 
   // ── Discounts ──
@@ -505,90 +502,95 @@ async function handleCheckout(request: NextRequest): Promise<NextResponse> {
 
   const normalizedCoupon = coupon_code?.trim().toUpperCase();
 
-  // Reward voucher (AANCHAL-*) — atomic one-time claim bound to this order
   if (normalizedCoupon?.startsWith("AANCHAL-")) {
     const claimed = await claimRewardVoucher(supabase, normalizedCoupon);
     if (!claimed.ok) {
       return NextResponse.json({ success: false, error: claimed.error }, { status: 400 });
     }
-    couponDiscount = Math.min(Math.round(claimed.value), rawTotal);
+    couponDiscount = Math.min(round2(claimed.value), rawTotal);
     rewardVoucherCode = normalizedCoupon;
   } else if (normalizedCoupon) {
-    const { data: coupon } = await supabase
-      .from("coupons")
-      .select("id, discount_type, discount_value, max_discount_amount, min_order_amount, usage_limit, per_customer_limit, is_active, start_date, end_date")
-      .eq("code", normalizedCoupon)
-      .eq("is_active", true)
-      .single();
+    try {
+      const { data: coupon } = await supabase
+        .from("coupons")
+        .select("id, discount_type, discount_value, max_discount_amount, min_order_amount, usage_limit, per_customer_limit, is_active, start_date, end_date")
+        .eq("code", normalizedCoupon)
+        .eq("is_active", true)
+        .single();
 
-    if (coupon) {
-      const now = new Date();
-      const validDates =
-        (!coupon.start_date || new Date(coupon.start_date) <= now) &&
-        (!coupon.end_date || new Date(coupon.end_date) >= now);
-      const validMinOrder = !coupon.min_order_amount || rawTotal >= coupon.min_order_amount;
+      if (coupon) {
+        const now = new Date();
+        const validDates =
+          (!coupon.start_date || new Date(coupon.start_date) <= now) &&
+          (!coupon.end_date || new Date(coupon.end_date) >= now);
+        const validMinOrder = !coupon.min_order_amount || rawTotal >= coupon.min_order_amount;
 
-      if (validDates && validMinOrder) {
-        const { count: usageCount } = await supabase
-          .from("coupon_usage")
-          .select("id", { count: "exact", head: true })
-          .eq("coupon_id", coupon.id);
-        const { count: customerCount } = await supabase
-          .from("coupon_usage")
-          .select("id", { count: "exact", head: true })
-          .eq("coupon_id", coupon.id)
-          .eq("customer_email", customer_email);
+        if (validDates && validMinOrder) {
+          const { count: usageCount } = await supabase
+            .from("coupon_usage")
+            .select("id", { count: "exact", head: true })
+            .eq("coupon_id", coupon.id);
+          const { count: customerCount } = await supabase
+            .from("coupon_usage")
+            .select("id", { count: "exact", head: true })
+            .eq("coupon_id", coupon.id)
+            .eq("customer_email", customer_email);
 
-        if (coupon.usage_limit && usageCount !== null && usageCount >= coupon.usage_limit) {
-          return NextResponse.json({ success: false, error: Messages.couponUsageLimit }, { status: 400 });
-        }
-        if (coupon.per_customer_limit && customerCount !== null && customerCount >= coupon.per_customer_limit) {
-          return NextResponse.json({ success: false, error: Messages.couponAlreadyUsed }, { status: 400 });
-        }
+          if (coupon.usage_limit && usageCount !== null && usageCount >= coupon.usage_limit) {
+            return NextResponse.json({ success: false, error: Messages.couponUsageLimit }, { status: 400 });
+          }
+          if (coupon.per_customer_limit && customerCount !== null && customerCount >= coupon.per_customer_limit) {
+            return NextResponse.json({ success: false, error: Messages.couponAlreadyUsed }, { status: 400 });
+          }
 
-        if (coupon.discount_type === "fixed") {
-          couponDiscount = coupon.discount_value;
-        } else {
-          couponDiscount = Math.round((rawTotal * coupon.discount_value) / 100);
+          if (coupon.discount_type === "fixed") {
+            couponDiscount = coupon.discount_value;
+          } else {
+            couponDiscount = round2((rawTotal * coupon.discount_value) / 100);
+          }
+          if (coupon.max_discount_amount) {
+            couponDiscount = Math.min(couponDiscount, coupon.max_discount_amount);
+          }
+          couponDiscount = Math.min(round2(couponDiscount), rawTotal);
+          couponId = coupon.id;
         }
-        if (coupon.max_discount_amount) {
-          couponDiscount = Math.min(couponDiscount, coupon.max_discount_amount);
-        }
-        couponDiscount = Math.min(Math.round(couponDiscount), rawTotal);
-        couponId = coupon.id;
       }
+    } catch (err) {
+      console.error("[create-order] Coupon validation error:", err);
     }
   }
 
-  const totalAfterCoupon = rawTotal - couponDiscount;
+  const totalAfterCoupon = round2(rawTotal - couponDiscount);
 
   // Influencer referral discount
   if (referral_code && referral_code.trim()) {
     const code = referral_code.trim().toUpperCase();
-    const { data: influencer } = await supabase.rpc("get_influencer_by_code", {
-      referral_code_input: code,
-    });
+    try {
+      const { data: influencer } = await supabase.rpc("get_influencer_by_code", {
+        referral_code_input: code,
+      });
 
-    if (!influencer || influencer.status !== "approved") {
-      await releaseRewardVoucher(supabase, rewardVoucherCode);
-      return NextResponse.json(
-        { success: false, error: "Invalid or inactive referral code.", code: "INVALID_REFERRAL" },
-        { status: 400 },
-      );
+      if (!influencer || influencer.status !== "approved") {
+        await releaseRewardVoucher(supabase, rewardVoucherCode);
+        return NextResponse.json(
+          { success: false, error: "Invalid or inactive referral code.", code: "INVALID_REFERRAL" },
+          { status: 400 },
+        );
+      }
+
+      const INFLUENCER_COMMISSION_RATE = 0.1;
+      influencerDiscount = Math.min(round2(totalAfterCoupon * INFLUENCER_COMMISSION_RATE), INFLUENCER_DISCOUNT_CAP);
+      influencerDiscount = Math.min(influencerDiscount, totalAfterCoupon);
+      influencerCode = code;
+    } catch (err) {
+      console.error("[create-order] Influencer referral error:", err);
     }
-    influencerDiscount = Math.min(Math.round(totalAfterCoupon * INFLUENCER_COMMISSION_RATE), INFLUENCER_DISCOUNT_CAP);
-    influencerDiscount = Math.min(influencerDiscount, totalAfterCoupon);
-    influencerCode = code;
   }
 
-  const totalAfterReferral = totalAfterCoupon - influencerDiscount;
+  const totalAfterReferral = round2(totalAfterCoupon - influencerDiscount);
 
-  // ── Payment-method specific calculations ──
-  // Money is stored in rupees to 2 decimal places (numeric(10,2) columns).
-  // discountAmount is always derived so the CHECK
-  // total_amount = subtotal + shipping_fee - discount_amount holds exactly.
   const grossTotal = rawTotal;
-  const totalAfterReferralRounded = Math.round(totalAfterReferral * 100) / 100;
+  const totalAfterReferralRounded = round2(totalAfterReferral);
 
   let totalAmount: number;
   let prepaidAmount: number;
@@ -597,76 +599,91 @@ async function handleCheckout(request: NextRequest): Promise<NextResponse> {
   let discountAmount: number;
 
   if (whatsappMode) {
-    // Phase 1: no online payment happens on the website, so no prepaid
-    // incentive is applied. The amount shown is what the owner confirms
-    // manually with the customer.
     totalAmount = totalAfterReferralRounded;
-    prepaidAmount = 0;
-    codAmount = 0;
     prepaidDiscount = 0;
-    discountAmount = Math.round((grossTotal - totalAmount) * 100) / 100;
+    discountAmount = round2(grossTotal - totalAmount);
+    if (paymentMethod === "cod") {
+      prepaidAmount = 0;
+      codAmount = totalAmount;
+    } else {
+      prepaidAmount = totalAmount;
+      codAmount = 0;
+    }
   } else if (paymentMethod === "prepaid") {
-    prepaidDiscount = Math.round(totalAfterReferralRounded * PREPAID_DISCOUNT_RATE * 100) / 100;
-    totalAmount = Math.round((totalAfterReferralRounded - prepaidDiscount) * 100) / 100;
-    discountAmount = Math.round((grossTotal - totalAmount) * 100) / 100;
+    prepaidDiscount = round2(totalAfterReferralRounded * PREPAID_DISCOUNT_RATE);
+    totalAmount = round2(totalAfterReferralRounded - prepaidDiscount);
+    discountAmount = round2(grossTotal - totalAmount);
     prepaidAmount = totalAmount;
     codAmount = 0;
   } else {
     totalAmount = totalAfterReferralRounded;
-    prepaidAmount = Math.ceil((totalAmount * 100) / 2) / 100;
-    codAmount = Math.round((totalAmount - prepaidAmount) * 100) / 100;
+    prepaidAmount = round2(Math.ceil((totalAmount * 100) / 2) / 100);
+    codAmount = round2(totalAmount - prepaidAmount);
     prepaidDiscount = 0;
-    discountAmount = Math.round((grossTotal - totalAmount) * 100) / 100;
+    discountAmount = round2(grossTotal - totalAmount);
   }
 
-  // ── Generate payment references ──
+  // ── Phase 2: Payment references (only in non-WhatsApp mode) ──
   let razorpayOrderId: string | null = null;
   let paytmOrderId: string | null = null;
 
-  const adapter = await getProviderAdapter(paymentGateway);
-  const amountPaiseToCharge = rupeesToPaise(paymentMethod === "prepaid" ? totalAmount : prepaidAmount);
+  if (!whatsappMode) {
+    try {
+      const { getPaytmConfig } = await import("@/lib/paytm");
+      const paytmConfig = getPaytmConfig();
+      const { getProviderAdapter } = await import("@/lib/payments");
+      const paymentGateway: "paytm" | "razorpay" = paytmConfig ? "paytm" : "razorpay";
+      const adapter = await getProviderAdapter(paymentGateway);
+      const amountPaiseToCharge = rupeesToPaise(paymentMethod === "prepaid" ? totalAmount : prepaidAmount);
 
-  if (whatsappMode) {
-    // No gateway interaction in Phase 1 — the order is confirmed manually.
-  } else if (adapter && adapter.createOrder) {
-    const createRes = await adapter.createOrder({ amountPaise: amountPaiseToCharge, currency: "INR", receipt: orderId, notes: { customer_name, customer_email, payment_method: paymentMethod } });
-    if (createRes?.error) {
-      console.error("[create-order] Provider createOrder failed:", createRes.error);
-      await releaseRewardVoucher(supabase, rewardVoucherCode);
-      return NextResponse.json({ success: false, error: Messages.paymentNotConfigured }, { status: 502 });
-    }
-    if (paymentGateway === "razorpay") {
-      razorpayOrderId = createRes.providerOrderId ?? null;
-    } else {
-      // paytm: prefer provider-supplied id, fall back to legacy build
-      paytmOrderId = createRes.providerOrderId ?? buildPaytmOrderId(orderId, 1);
-    }
-  } else {
-    // Fallback to previous inline behavior when adapter doesn't implement createOrder
-    if (paymentGateway === "razorpay") {
-      try {
-        const razorpayOrder = await razorpay!.orders.create({
-          amount: amountPaiseToCharge,
-          currency: "INR",
-          receipt: `rcpt_${Date.now()}`,
-          notes: { customer_name, customer_email, payment_method: paymentMethod },
-        });
-        razorpayOrderId = razorpayOrder.id;
-      } catch (err) {
-        console.error("[create-order] Razorpay order creation failed:", err instanceof Error ? err.message : "unknown");
-        await releaseRewardVoucher(supabase, rewardVoucherCode);
-        return NextResponse.json(
-          { success: false, error: Messages.paymentNotConfigured },
-          { status: 502 },
-        );
+      if (adapter && adapter.createOrder) {
+        const createRes = await adapter.createOrder({ amountPaise: amountPaiseToCharge, currency: "INR", receipt: orderId, notes: { customer_name, customer_email, payment_method: paymentMethod } });
+        if (createRes?.error) {
+          console.error("[create-order] Provider createOrder failed:", createRes.error);
+          await releaseRewardVoucher(supabase, rewardVoucherCode);
+          return NextResponse.json({ success: false, error: Messages.paymentNotConfigured }, { status: 502 });
+        }
+        if (paymentGateway === "razorpay") {
+          razorpayOrderId = createRes.providerOrderId ?? null;
+        } else {
+          const { buildPaytmOrderId } = await import("@/lib/paytm");
+          paytmOrderId = createRes.providerOrderId ?? buildPaytmOrderId(orderId, 1);
+        }
+      } else {
+        if (paymentGateway === "razorpay") {
+          const Razorpay = (await import("razorpay")).default;
+          const razorpayKeyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+          const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
+          if (razorpayKeyId && razorpayKeySecret) {
+            const razorpay = new Razorpay({ key_id: razorpayKeyId, key_secret: razorpayKeySecret });
+            const razorpayOrder = await razorpay.orders.create({
+              amount: amountPaiseToCharge,
+              currency: "INR",
+              receipt: `rcpt_${Date.now()}`,
+              notes: { customer_name, customer_email, payment_method: paymentMethod },
+            });
+            razorpayOrderId = razorpayOrder.id;
+          }
+        } else {
+          const { buildPaytmOrderId } = await import("@/lib/paytm");
+          paytmOrderId = buildPaytmOrderId(orderId, 1);
+        }
       }
-    } else {
-      paytmOrderId = buildPaytmOrderId(orderId, 1);
+    } catch (err) {
+      console.error("[create-order] Payment provider error:", err);
+      await releaseRewardVoucher(supabase, rewardVoucherCode);
+      return NextResponse.json(
+        { success: false, error: Messages.paymentNotConfigured },
+        { status: 502 },
+      );
     }
   }
 
   // ── Create order row ──
-  const { data: order } = await supabase
+  // NOTE: payment_provider must be a real gateway ("razorpay" | "paytm") — the
+  // orders table CHECK constraint rejects values like "whatsapp". In WhatsApp
+  // mode we use "razorpay" as the default since no actual payment is processed.
+  const { data: order, error: orderError } = await supabase
     .from("orders")
     .insert({
       id: orderId,
@@ -686,7 +703,7 @@ async function handleCheckout(request: NextRequest): Promise<NextResponse> {
       prepaid_amount: prepaidAmount,
       cod_amount: codAmount,
       payment_method: paymentMethod,
-      payment_provider: paymentGateway,
+      payment_provider: "razorpay",
       confirmation_method: whatsappMode ? "whatsapp" : "payment",
       coupon_id: couponId,
       reward_voucher_code: rewardVoucherCode,
@@ -700,7 +717,8 @@ async function handleCheckout(request: NextRequest): Promise<NextResponse> {
     .select("id, order_number")
     .single();
 
-  if (!order) {
+  if (orderError || !order) {
+    console.error("[create-order] Order insert error:", orderError?.message ?? "unknown");
     await releaseRewardVoucher(supabase, rewardVoucherCode);
     return NextResponse.json(
       { success: false, error: Messages.orderCreateError },
@@ -708,15 +726,17 @@ async function handleCheckout(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // ── Stamp the voucher with the order now that the row exists (FK on
-  //    used_by_order_id → orders.id). Best-effort: the voucher is already
-  //    atomically claimed; this only fills in the audit reference. ──
+  // ── Stamp the voucher ──
   if (rewardVoucherCode) {
-    await supabase
-      .from("reward_vouchers")
-      .update({ used_by_order_id: order.id })
-      .eq("code", rewardVoucherCode)
-      .eq("is_used", true);
+    try {
+      await supabase
+        .from("reward_vouchers")
+        .update({ used_by_order_id: order.id })
+        .eq("code", rewardVoucherCode)
+        .eq("is_used", true);
+    } catch (err) {
+      console.error("[create-order] Voucher stamp error:", err);
+    }
   }
 
   // ── Insert order items ──
@@ -772,9 +792,13 @@ async function handleCheckout(request: NextRequest): Promise<NextResponse> {
     });
   }
 
-  // ── Initiate payment after the order exists ──
-  if (paymentGateway === "paytm") {
-    const initiated = await initiateTransaction(paytmConfig!, {
+  // ── Phase 2: Initiate payment after the order exists ──
+  const { getPaytmConfig } = await import("@/lib/paytm");
+  const paytmConfig = getPaytmConfig();
+
+  if (paytmConfig) {
+    const { initiateTransaction, getProcessTransactionUrl } = await import("@/lib/paytm");
+    const initiated = await initiateTransaction(paytmConfig, {
       paytmOrderId: paytmOrderId!,
       amountPaise: rupeesToPaise(paymentMethod === "prepaid" ? totalAmount : prepaidAmount),
       customerId: customer_email,
@@ -785,8 +809,6 @@ async function handleCheckout(request: NextRequest): Promise<NextResponse> {
     if (!initiated.success || !initiated.txnToken) {
       console.error("[create-order] Paytm initiate failed:", initiated.resultCode, initiated.resultMsg);
       await supabase.from("orders").delete().eq("id", order.id);
-      // Clean up the coupon usage row created above so failed orders do not
-      // count toward coupon usage limits.
       if (couponId) {
         await supabase.from("coupon_usage").delete().eq("order_id", order.id);
       }
@@ -818,7 +840,7 @@ async function handleCheckout(request: NextRequest): Promise<NextResponse> {
         paytm: {
           paytmOrderId: paytmOrderId!,
           txnToken: initiated.txnToken,
-          redirectUrl: getProcessTransactionUrl(paytmConfig!, paytmOrderId!, initiated.txnToken),
+          redirectUrl: getProcessTransactionUrl(paytmConfig, paytmOrderId!, initiated.txnToken),
         },
       }),
     });

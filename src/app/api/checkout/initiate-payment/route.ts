@@ -1,17 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "node:crypto";
-import Razorpay from "razorpay";
 import { createServiceClient } from "@/lib/supabase/server";
 import { z } from "zod";
 import { validateRequest } from "@/lib/api-utils";
 import { createOrderStatusToken } from "@/lib/orders/public-status";
 import { Messages } from "@/lib/messages";
-import {
-  getPaytmConfig,
-  initiateTransaction,
-  buildPaytmOrderId,
-  getProcessTransactionUrl,
-} from "@/lib/paytm";
 import { rupeesToPaise } from "@/lib/utils";
 
 const initiatePaymentSchema = z.object({
@@ -79,8 +72,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   );
 
   // ── Paytm: fresh attempt with a new Paytm order id ──
+  const { getPaytmConfig } = await import("@/lib/paytm");
   const paytmConfig = getPaytmConfig();
   if (paytmConfig) {
+    const { initiateTransaction, buildPaytmOrderId, getProcessTransactionUrl } = await import("@/lib/paytm");
     const previous = order.paytm_order_id?.match(/-(\d+)$/);
     const attempt = previous ? Number(previous[1]) + 1 : 2;
     const paytmOrderId = buildPaytmOrderId(order.id, attempt);
@@ -130,6 +125,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   try {
+    const Razorpay = (await import("razorpay")).default;
     const razorpay = new Razorpay({ key_id: razorpayKeyId, key_secret: razorpayKeySecret });
     const razorpayOrder = await razorpay.orders.create({
       amount: chargeablePaise,

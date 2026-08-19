@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getOrderByIdAdmin, getOrderStatusHistory } from "@/lib/queries/orders";
 import { formatPrice, formatDate, getOrderStatusLabel, getOrderStatusColor, getPaymentStatusColor, getPaymentMethodLabel, getConfirmationMethodLabel, getConfirmationMethodColor } from "@/lib/utils";
 import { OrderStatusUpdater } from "@/components/admin/OrderStatusUpdater";
+import { PaymentManager } from "@/components/admin/PaymentManager";
 import { CreateShipmentButton } from "@/components/admin/CreateShipmentButton";
 import { GenerateLabelButton } from "@/components/admin/GenerateLabelButton";
 import { Ruler, FileText } from "lucide-react";
@@ -224,10 +225,6 @@ export default async function AdminOrderDetailPage({ params }: Props) {
                 <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${getOrderStatusColor(order.order_status)}`}>{getOrderStatusLabel(order.order_status)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-stone-600">Payment</span>
-                <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${getPaymentStatusColor(order.payment_status)}`}>{order.payment_status}</span>
-              </div>
-              <div className="flex justify-between">
                 <span className="text-stone-600">Packaging</span>
                 <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${
                   order.packaging_status === "ready_for_pickup" ? "bg-green-100 text-green-800" :
@@ -256,6 +253,16 @@ export default async function AdminOrderDetailPage({ params }: Props) {
               )}
             </div>
           </div>
+
+          {/* Payment Manager */}
+          <PaymentManager
+            orderId={order.id}
+            currentStatus={order.payment_status}
+            confirmationMethod={order.confirmation_method}
+            paymentMethod={order.payment_method}
+            codAmount={order.cod_amount}
+            prepaidAmount={order.prepaid_amount}
+          />
 
           {order.notes && (
             <div className="rounded-sm border border-stone-200 bg-white p-5">

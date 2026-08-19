@@ -5,11 +5,19 @@ import { useRouter } from "next/navigation";
 import { Messages } from "@/lib/messages";
 import type { OrderStatus, PackagingStatus } from "@/types";
 
-const ORDER_STATUSES: OrderStatus[] = [
-  "pending", "confirmed", "in_production", "ready_to_ship",
-  "shipped", "out_for_delivery", "delivered",
-  "cancelled", "return_requested", "returned", "refunded",
-];
+const ORDER_STATUS_FLOW: Record<string, OrderStatus[]> = {
+  pending: ["confirmed", "cancelled"],
+  confirmed: ["in_production", "shipped", "cancelled"],
+  in_production: ["ready_to_ship", "shipped", "cancelled"],
+  ready_to_ship: ["shipped", "cancelled"],
+  shipped: ["out_for_delivery", "delivered"],
+  out_for_delivery: ["delivered"],
+  delivered: ["return_requested"],
+  cancelled: ["refunded"],
+  return_requested: ["returned", "refunded"],
+  returned: ["refunded"],
+  refunded: [],
+};
 
 const STATUS_LABELS: Record<OrderStatus, string> = {
   pending: "Pending",
@@ -53,6 +61,8 @@ export function OrderStatusUpdater({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+  const allowedStatuses = ORDER_STATUS_FLOW[currentStatus] ?? [];
 
   const handleUpdate = async () => {
     if (
@@ -109,9 +119,16 @@ export function OrderStatusUpdater({
           onChange={(e) => setStatus(e.target.value as OrderStatus)}
           className="rounded border border-stone-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-stone-900"
         >
-          {ORDER_STATUSES.map((s) => (
-            <option key={s} value={s}>{STATUS_LABELS[s]}</option>
-          ))}
+          <optgroup label="Current">
+            <option value={currentStatus}>{STATUS_LABELS[currentStatus]} (current)</option>
+          </optgroup>
+          {allowedStatuses.length > 0 && (
+            <optgroup label="Allowed next">
+              {allowedStatuses.map((s) => (
+                <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+              ))}
+            </optgroup>
+          )}
         </select>
         <button
           onClick={handleUpdate}

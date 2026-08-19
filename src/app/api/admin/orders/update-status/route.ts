@@ -8,6 +8,20 @@ import { createInfluencerEarnings, cancelInfluencerEarnings } from "@/lib/orders
 import { sendOrderEvent } from "@/lib/notifications/order-events";
 import { getShippingProvider } from "@/lib/shipping";
 
+const ORDER_STATUS_FLOW: Record<string, string[]> = {
+  pending: ["confirmed", "cancelled"],
+  confirmed: ["in_production", "shipped", "cancelled"],
+  in_production: ["ready_to_ship", "shipped", "cancelled"],
+  ready_to_ship: ["shipped", "cancelled"],
+  shipped: ["out_for_delivery", "delivered"],
+  out_for_delivery: ["delivered"],
+  delivered: ["return_requested"],
+  cancelled: ["refunded"],
+  return_requested: ["returned", "refunded"],
+  returned: ["refunded"],
+  refunded: [],
+};
+
 const updateStatusSchema = z.object({
   orderId: z.string().uuid("Invalid order ID"),
   order_status: z.enum([
@@ -32,7 +46,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const serviceClient = await createServiceClient();
   const { data: order } = await serviceClient
     .from("orders")
-    .select("id, order_number, order_status, customer_name, customer_email, customer_phone, payment_status, shiprocket_shipment_id")
+    .select("id, order_number, order_status, customer_name, customer_email, customer_phone, payment_method, payment_status, shiprocket_shipment_id")
     .eq("id", data.orderId)
     .single();
 
@@ -45,6 +59,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const oldStatus = order.order_status;
   const newStatus = data.order_status;
+
+  const allowedNext = ORDER_STATUS_FLOW[oldStatus] ?? [];
+  if (!allowedNext.includes(newStatus)) {
+    return NextResponse.json(
+      { success: false, error: `Cannot transition from "${oldStatus}" to "${newStatus}". Allowed: ${allowedNext.join(", ") || "none"}.` },
+      { status: 400 }
+    );
+  }
 
   // Build update payload
   const updatePayload: Record<string, unknown> = {
@@ -62,6 +84,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
   if (newStatus === "delivered" && oldStatus !== "delivered") {
     updatePayload.delivered_at = new Date().toISOString();
+    if (order.payment_method === "cod" && order.payment_status !== "completed") {
+      updatePayload.payment_status = "completed";
+    }
+  }
+  if (newStatus === "cancelled" && oldStatus !== "cancelled") {
+    updatePayload.cancelled_at = new Date().toISOString();
   }
 
   // Update order

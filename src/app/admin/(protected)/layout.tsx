@@ -3,7 +3,6 @@ import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { AdminNav } from "@/components/admin/AdminNav";
 
-// Auth is enforced by middleware — this layout only fetches the user for the nav bar.
 export default async function ProtectedAdminLayout({
   children,
 }: {
@@ -31,9 +30,11 @@ export default async function ProtectedAdminLayout({
   return (
     <div className="min-h-screen bg-stone-50">
       <AdminNav userEmail={user.email ?? ""} role={role} />
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        {children}
-      </main>
+      <div className="lg:pl-60 pt-14 lg:pt-0 min-h-screen">
+        <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }

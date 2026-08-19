@@ -11,7 +11,6 @@ import {
   type WhatsAppOrderSummary,
 } from "@/lib/whatsapp";
 import { StorefrontEmptyState } from "@/components/ui/StorefrontState";
-import PaymentStatusRefresher from "@/components/checkout/PaymentStatusRefresher";
 import OrderRetryButton from "@/components/checkout/OrderRetryButton";
 import CancelOrderButton from "@/components/checkout/CancelOrderButton";
 import CartClearer from "@/components/checkout/CartClearer";
@@ -27,7 +26,7 @@ type Props = {
 };
 
 export default async function OrderSuccessPage({ searchParams }: Props) {
-  const { orderId, statusToken, refresh } = await searchParams;
+  const { orderId, statusToken } = await searchParams;
   const validRequest =
     typeof orderId === "string" &&
     /^[0-9a-f-]{36}$/i.test(orderId) &&
@@ -261,16 +260,7 @@ export default async function OrderSuccessPage({ searchParams }: Props) {
         </div>
       )}
 
-      {!isWhatsApp && order.payment_provider === "paytm" && order.paytm_order_id && (
-        <PaymentStatusRefresher
-          orderId={order.id}
-          paytmOrderId={order.paytm_order_id}
-          paymentStatus={order.payment_status}
-          refreshParam={refresh}
-        />
-      )}
-
-      {/* Clear the cart once an order is recorded (WhatsApp flow) or paid (Paytm). */}
+      {/* Clear the cart once an order is recorded (WhatsApp flow) or paid. */}
       <CartClearer orderId={order.id} confirmed={isPaid || isWhatsApp} />
     </div>
   );

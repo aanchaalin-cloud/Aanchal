@@ -1,8 +1,5 @@
-import Link from "next/link";
 import { getAllOrdersAdmin } from "@/lib/queries/orders";
-import { formatPrice, formatDate, getOrderStatusColor, getPaymentStatusColor, getConfirmationMethodLabel, getConfirmationMethodColor } from "@/lib/utils";
-import { Messages } from "@/lib/messages";
-import { OrderFilters } from "./OrderFilters";
+import { OrdersPageClient } from "./OrdersPageClient";
 
 export const dynamic = "force-dynamic";
 
@@ -10,19 +7,31 @@ type Props = {
   searchParams: Promise<{
     payment_status?: string;
     order_status?: string;
+    search?: string;
   }>;
 };
 
 export default async function AdminOrdersPage({ searchParams }: Props) {
-  const { payment_status, order_status } = await searchParams;
+  const { payment_status, order_status, search } = await searchParams;
   let orders = await getAllOrdersAdmin();
 
-  // Apply filters
+  // Server-side filter by payment_status and order_status
   if (payment_status && payment_status !== "all") {
     orders = orders.filter((o) => o.payment_status === payment_status);
   }
   if (order_status && order_status !== "all") {
     orders = orders.filter((o) => o.order_status === order_status);
+  }
+  // Search filter (server-side for initial load)
+  if (search) {
+    const q = search.toLowerCase();
+    orders = orders.filter(
+      (o) =>
+        (o.order_number?.toLowerCase().includes(q)) ||
+        o.customer_name.toLowerCase().includes(q) ||
+        o.customer_email.toLowerCase().includes(q) ||
+        o.customer_phone.toLowerCase().includes(q)
+    );
   }
 
   return (
@@ -32,76 +41,12 @@ export default async function AdminOrdersPage({ searchParams }: Props) {
         <p className="text-sm text-stone-600 mt-1">{orders.length} order{orders.length !== 1 ? "s" : ""}</p>
       </div>
 
-      {/* Filters */}
-      <OrderFilters
+      <OrdersPageClient
+        orders={orders}
         currentPaymentStatus={payment_status ?? "all"}
         currentOrderStatus={order_status ?? "all"}
+        currentSearch={search ?? ""}
       />
-
-      {orders.length === 0 ? (
-        <div className="text-center py-16 border border-dashed border-stone-300 rounded-sm">
-          <p className="text-stone-600">
-            {payment_status || order_status
-              ? Messages.noOrdersFiltered
-              : Messages.noOrders}
-          </p>
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-sm border border-stone-200 bg-white">
-                  <div className="min-w-full">
-                  <table className="w-full divide-y divide-stone-100">
-            <thead>
-              <tr className="bg-stone-50">
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-stone-600">Order</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-stone-600">Customer</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-stone-600">Phone</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-stone-600">Amount</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-stone-600">Payment</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-stone-600">Status</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-stone-600">Date</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-stone-600">View</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-stone-100">
-              {orders.map((order) => (
-                <tr key={order.id} className="hover:bg-stone-50 transition-colors">
-                  <td className="px-4 py-3 text-sm font-mono text-stone-600">{order.order_number ?? `${order.id.slice(0, 8)}…`}</td>
-                  <td className="px-4 py-3">
-                    <p className="text-sm font-medium text-stone-900">{order.customer_name}</p>
-                    <p className="text-xs text-stone-600">{order.customer_email}</p>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-stone-600">{order.customer_phone}</td>
-                  <td className="px-4 py-3 text-sm font-medium text-stone-900">{formatPrice(order.total_amount)}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap items-center gap-1">
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${getPaymentStatusColor(order.payment_status)}`}>
-                        {order.payment_status}
-                      </span>
-                      {order.confirmation_method === "whatsapp" && (
-                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${getConfirmationMethodColor(order.confirmation_method)}`} title="Confirmed via WhatsApp, no online payment">
-                          {getConfirmationMethodLabel(order.confirmation_method)}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${getOrderStatusColor(order.order_status)}`}>
-                      {order.order_status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-xs text-stone-600">{formatDate(order.created_at)}</td>
-                  <td className="px-4 py-3 text-right">
-                    <Link href={`/admin/orders/${order.id}`} className="text-sm text-stone-600 hover:text-stone-900 font-medium">
-                      View →
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-      )}
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { z } from "zod";
 import crypto from "crypto";
 
 const reviewSchema = z.object({
-  influencerId: z.string().uuid("Invalid influencer ID"),
+  applicationId: z.string().uuid("Invalid application ID"),
   decision: z.enum(["approved", "rejected"]),
   notes: z.string().max(500).optional(),
 });
@@ -27,53 +27,27 @@ function generateReferralCode(fullName: string): string {
   return `AANCHAL${initials}${rand}`;
 }
 
+function generatePassword(): string {
+  return crypto.randomBytes(8).toString("hex");
+}
+
 export async function GET(): Promise<NextResponse> {
   const auth = await requireAdmin();
   if (auth instanceof NextResponse) return auth;
 
   const supabase = await createServiceClient();
-  const { data: profiles, error } = await supabase
-    .from("influencer_profiles")
-    .select(
-      `
-      id, referral_code, status, social_handle, platform, followers, bio, niche,
-      desired_promo_code, notes,
-      created_at, reviewed_at,
-      customers ( id, full_name, email, phone )
-    `
-    )
+
+  const { data: applications, error } = await supabase
+    .from("influencer_applications")
+    .select("*")
     .order("created_at", { ascending: false });
 
   if (error) {
-    console.error("[admin-list-influencers]", error.message);
+    console.error("[admin-influencers]", error.message);
     return NextResponse.json({ success: false, error: Messages.genericError }, { status: 500 });
   }
 
-  const profileIds = (profiles ?? []).map((p: { id: string }) => p.id);
-
-  const { data: earnings } = await supabase
-    .from("influencer_earnings")
-    .select("influencer_id, status, commission_amount, order_amount, created_at")
-    .in("influencer_id", profileIds);
-
-  const earningsByInfluencer = new Map<string, { total: number; pending: number; paid: number; orders: number }>();
-  for (const row of earnings ?? []) {
-    const current = earningsByInfluencer.get(row.influencer_id) ?? { total: 0, pending: 0, paid: 0, orders: 0 };
-    if (row.status !== "cancelled") {
-      current.total += row.commission_amount;
-      current.orders += 1;
-    }
-    if (row.status === "pending") current.pending += row.commission_amount;
-    if (row.status === "paid") current.paid += row.commission_amount;
-    earningsByInfluencer.set(row.influencer_id, current);
-  }
-
-  const data = (profiles ?? []).map((p: { id: string }) => ({
-    ...p,
-    earnings: earningsByInfluencer.get(p.id) ?? { total: 0, pending: 0, paid: 0, orders: 0 },
-  }));
-
-  return NextResponse.json({ success: true, data });
+  return NextResponse.json({ success: true, data: applications ?? [] });
 }
 
 export async function PUT(request: NextRequest): Promise<NextResponse> {
@@ -97,33 +71,28 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const { influencerId, decision, notes } = parsed.data;
-
+  const { applicationId, decision } = parsed.data;
   const supabase = await createServiceClient();
 
-  const { data: existing } = await supabase
-    .from("influencer_profiles")
-    .select("id, status, referral_code, desired_promo_code, customers(full_name)")
-    .eq("id", influencerId)
+  const { data: app, error: fetchErr } = await supabase
+    .from("influencer_applications")
+    .select("*")
+    .eq("id", applicationId)
     .single();
 
-  if (!existing) {
+  if (fetchErr || !app) {
     return NextResponse.json({ success: false, error: "Application not found" }, { status: 404 });
   }
 
-  if (existing.status !== "pending") {
+  if (app.status !== "pending") {
     return NextResponse.json({ success: false, error: "Application already reviewed" }, { status: 400 });
   }
 
   if (decision === "rejected") {
     const { error } = await supabase
-      .from("influencer_profiles")
-      .update({
-        status: "rejected",
-        notes: notes ?? null,
-        reviewed_at: new Date().toISOString(),
-      })
-      .eq("id", influencerId);
+      .from("influencer_applications")
+      .update({ status: "rejected", reviewed_at: new Date().toISOString() })
+      .eq("id", applicationId);
 
     if (error) {
       return NextResponse.json({ success: false, error: Messages.genericError }, { status: 500 });
@@ -131,17 +100,41 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ success: true, data: { message: "Application rejected." } });
   }
 
-  // Approve → generate a referral code, honouring the influencer's requested
-  // promo code when available and unused.
-  const fullName = (existing.customers as unknown as { full_name?: string } | null)?.full_name ?? "AANCHAL";
-  let referralCode = existing.referral_code ?? null;
-  const desiredCode = existing.desired_promo_code;
+  // ── Approve: create auth user → customer → influencer_profile ──
 
-  if (!referralCode && desiredCode) {
-    // Normalise to uppercase: checkout stores the code uppercased and
-    // orders.influencer_code has a case-sensitive FK to referral_code, so a
-    // lower/mixed-case desired code would break every order that uses it.
-    const normalized = desiredCode.trim().toUpperCase();
+  const tempPassword = generatePassword();
+
+  const { data: newUser, error: createUserErr } = await supabase.auth.admin.createUser({
+    email: app.email,
+    password: tempPassword,
+    email_confirm: true,
+    user_metadata: { full_name: app.full_name, phone: app.phone },
+  });
+
+  if (createUserErr) {
+    console.error("[admin-influencers] Create user error:", createUserErr.message);
+    return NextResponse.json(
+      { success: false, error: "Failed to create user account. " + createUserErr.message },
+      { status: 500 }
+    );
+  }
+
+  const userId = newUser.user.id;
+
+  const { error: custErr } = await supabase.from("customers").upsert({
+    id: userId,
+    full_name: app.full_name,
+    email: app.email,
+    phone: app.phone,
+  }, { onConflict: "id" });
+
+  if (custErr) {
+    console.warn("[admin-influencers] Customer upsert failed:", custErr.message);
+  }
+
+  let referralCode = generateReferralCode(app.full_name);
+  if (app.desired_promo_code) {
+    const normalized = app.desired_promo_code.trim().toUpperCase();
     const { data: clash } = await supabase
       .from("influencer_profiles")
       .select("id")
@@ -150,35 +143,47 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
     if (!clash) referralCode = normalized;
   }
 
-  if (!referralCode) referralCode = generateReferralCode(fullName);
-
-  // Ensure uniqueness
-  const { data: clash } = await supabase
+  const { data: codeClash } = await supabase
     .from("influencer_profiles")
     .select("id")
     .eq("referral_code", referralCode)
     .maybeSingle();
+  if (codeClash) referralCode = generateReferralCode(app.full_name);
 
-  if (clash) {
-    referralCode = generateReferralCode(fullName);
+  const { error: profileErr } = await supabase.from("influencer_profiles").upsert({
+    id: userId,
+    status: "approved",
+    social_handle: app.social_handle,
+    social_link: app.social_link,
+    platform: app.platform,
+    followers: app.followers,
+    bio: app.bio,
+    niche: app.niche,
+    desired_promo_code: app.desired_promo_code,
+    referral_code: referralCode,
+    reviewed_at: new Date().toISOString(),
+  }, { onConflict: "id" });
+
+  if (profileErr) {
+    console.error("[admin-influencers] Profile upsert error:", profileErr.message);
+    return NextResponse.json(
+      { success: false, error: "Failed to create influencer profile." },
+      { status: 500 }
+    );
   }
 
-  const { error } = await supabase
-    .from("influencer_profiles")
-    .update({
-      status: "approved",
-      referral_code: referralCode,
-      notes: notes ?? null,
-      reviewed_at: new Date().toISOString(),
-    })
-    .eq("id", influencerId);
-
-  if (error) {
-    return NextResponse.json({ success: false, error: Messages.genericError }, { status: 500 });
-  }
+  await supabase
+    .from("influencer_applications")
+    .update({ status: "approved", reviewed_at: new Date().toISOString() })
+    .eq("id", applicationId);
 
   return NextResponse.json({
     success: true,
-    data: { message: "Application approved.", referral_code: referralCode },
+    data: {
+      message: "Application approved.",
+      referral_code: referralCode,
+      email: app.email,
+      temp_password: tempPassword,
+    },
   });
 }
