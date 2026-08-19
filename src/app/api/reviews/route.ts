@@ -66,21 +66,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const supabase = await createServiceClient();
 
-  // Reviews are customer identity, so require a signed-in session whose email
-  // matches the claimed reviewer email.
+  // Reviews may be submitted with any email or none at all. A signed-in user's
+  // verified email always takes precedence so verified-purchase badges work.
   const sessionClient = await createClient();
   const { data: { user } } = await sessionClient.auth.getUser();
-  if (!user?.email || user.email.toLowerCase() !== data.customer_email.toLowerCase()) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Sign in with the email you'd like the review to be associated with.",
-        code: "AUTH_REQUIRED",
-      },
-      { status: 403 }
-    );
-  }
-  const customerEmail = user.email.toLowerCase();
+  const customerEmail: string | null =
+    user?.email?.toLowerCase() ||
+    (data.customer_email ? data.customer_email.toLowerCase() : null);
 
   // Verify product exists
   const { data: product } = await supabase
@@ -97,19 +89,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // Check for duplicate review (same email + product)
-  const { data: existingReview } = await supabase
-    .from("reviews")
-    .select("id")
-    .eq("product_id", data.product_id)
-    .eq("customer_email", customerEmail)
-    .single();
+  // Check for duplicate review (same email + product). Anonymous reviews
+  // (no email) bypass this check.
+  if (customerEmail) {
+    const { data: existingReview } = await supabase
+      .from("reviews")
+      .select("id")
+      .eq("product_id", data.product_id)
+      .eq("customer_email", customerEmail)
+      .single();
 
-  if (existingReview) {
-    return NextResponse.json(
-      { success: false, error: "You have already reviewed this product." },
-      { status: 409 }
-    );
+    if (existingReview) {
+      return NextResponse.json(
+        { success: false, error: "You have already reviewed this product." },
+        { status: 409 }
+      );
+    }
   }
 
   // Check if verified purchase
@@ -120,7 +115,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     .limit(20);
 
   let isVerifiedPurchase = false;
-  if (orderItems && orderItems.length > 0) {
+  if (customerEmail && orderItems && orderItems.length > 0) {
     const orderIds = [...new Set(orderItems.map((item) => item.order_id))];
     const { data: orders } = await supabase
       .from("orders")

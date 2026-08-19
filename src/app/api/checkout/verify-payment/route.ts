@@ -156,7 +156,7 @@ async function handleRazorpayVerification(
     warn("Order not found during Razorpay verify", { traceId, orderId, error: orderError?.message });
     return NextResponse.json({ success: false, error: Messages.orderNotFound }, { status: 404 });
   }
-  if (order.payment_status === "paid") {
+  if (order.payment_status === "paid" || order.payment_status === "partially_paid") {
     info("Payment already processed", { traceId, orderId });
     return NextResponse.json({ success: true, data: { message: "Payment already processed" } });
   }

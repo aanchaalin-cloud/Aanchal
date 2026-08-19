@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getAllOrdersAdmin } from "@/lib/queries/orders";
-import { formatPrice, formatDate, getOrderStatusColor, getPaymentStatusColor } from "@/lib/utils";
+import { formatPrice, formatDate, getOrderStatusColor, getPaymentStatusColor, getConfirmationMethodLabel, getConfirmationMethodColor } from "@/lib/utils";
 import { Messages } from "@/lib/messages";
 import { OrderFilters } from "./OrderFilters";
 
@@ -65,7 +65,7 @@ export default async function AdminOrdersPage({ searchParams }: Props) {
             <tbody className="divide-y divide-stone-100">
               {orders.map((order) => (
                 <tr key={order.id} className="hover:bg-stone-50 transition-colors">
-                  <td className="px-4 py-3 text-sm font-mono text-stone-600">{order.id.slice(0, 8)}…</td>
+                  <td className="px-4 py-3 text-sm font-mono text-stone-600">{order.order_number ?? `${order.id.slice(0, 8)}…`}</td>
                   <td className="px-4 py-3">
                     <p className="text-sm font-medium text-stone-900">{order.customer_name}</p>
                     <p className="text-xs text-stone-600">{order.customer_email}</p>
@@ -73,9 +73,16 @@ export default async function AdminOrdersPage({ searchParams }: Props) {
                   <td className="px-4 py-3 text-sm text-stone-600">{order.customer_phone}</td>
                   <td className="px-4 py-3 text-sm font-medium text-stone-900">{formatPrice(order.total_amount)}</td>
                   <td className="px-4 py-3">
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${getPaymentStatusColor(order.payment_status)}`}>
-                      {order.payment_status}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${getPaymentStatusColor(order.payment_status)}`}>
+                        {order.payment_status}
+                      </span>
+                      {order.confirmation_method === "whatsapp" && (
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${getConfirmationMethodColor(order.confirmation_method)}`} title="Confirmed via WhatsApp, no online payment">
+                          {getConfirmationMethodLabel(order.confirmation_method)}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${getOrderStatusColor(order.order_status)}`}>

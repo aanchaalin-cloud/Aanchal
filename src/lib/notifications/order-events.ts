@@ -5,6 +5,7 @@ export type OrderEventType = OrderEmailType;
 type OrderEventParams = {
   type: OrderEventType;
   orderId: string;
+  orderNumber?: string | null;
   customerEmail: string;
   customerName: string;
   trackingId?: string;
@@ -26,6 +27,7 @@ export async function sendOrderEvent(params: OrderEventParams): Promise<void> {
       to: params.customerEmail,
       customerName: params.customerName,
       orderId: params.orderId,
+      orderNumber: params.orderNumber,
       trackingId: params.trackingId,
       trackingUrl: params.trackingUrl,
       shippingProvider: params.shippingProvider,

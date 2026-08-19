@@ -7,6 +7,7 @@ import { rupeesToPaise } from "@/lib/utils";
 import { createOrderStatusToken } from "@/lib/orders/public-status";
 import { Messages } from "@/lib/messages";
 import { validateRequest } from "@/lib/api-utils";
+import { getCheckoutMode } from "@/lib/env";
 import {
   getPaytmConfig,
   initiateTransaction,
@@ -16,13 +17,25 @@ import {
 } from "@/lib/paytm";
 import { getProviderAdapter } from "@/lib/payments";
 import { INFLUENCER_COMMISSION_RATE } from "@/lib/orders/influencer-earnings";
+import { getPrimaryStorefrontImage } from "@/lib/product-images";
+import { buildWhatsAppConfirmationForOrder } from "@/lib/orders/whatsapp-confirmation";
 
-const SHIPPING_FEE = 99;
+const SHIPPING_FEE = 0;
 const PREPAID_DISCOUNT_RATE = 0.05;
 const INFLUENCER_DISCOUNT_CAP = 500;
 
+// Idempotency keys arrive as a raw composite string from the checkout page.
+// Normalize to a fixed-length hash so the stored value is uniform, bounded and
+// safe to match exactly on resume. Re-submitting identical inputs recomputes
+// the same hash, so deduplication still works.
+function normalizeIdempotencyKey(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  return crypto.createHash("sha256").update(`co:${raw}`).digest("hex");
+}
+
 type OrderRow = {
   id: string;
+  order_number?: string | null;
   payment_status: string;
   payment_method: string;
   total_amount: number;
@@ -34,6 +47,7 @@ type OrderRow = {
   customer_phone: string;
   paytm_order_id: string | null;
   razorpay_order_id: string | null;
+  confirmation_method?: string | null;
 };
 
 function checkoutResponseData(
@@ -77,6 +91,24 @@ function chargeablePaise(order: {
   return rupeesToPaise(
     order.payment_method === "cod" ? Number(order.prepaid_amount) : Number(order.total_amount)
   );
+}
+
+/**
+ * Response for a Phase 1 WhatsApp order. Returns the order id + the prepared
+ * WhatsApp link so the client can redirect the customer straight to WhatsApp
+ * with the full message pre-filled. The message is always built from the saved
+ * order row (single source of truth is the DB, not the browser).
+ */
+async function whatsappResponseData(order: { id: string; order_number?: string | null }) {
+  const confirmation = await buildWhatsAppConfirmationForOrder(order.id);
+  return {
+    orderId: order.id,
+    orderNumber: order.order_number,
+    confirmationMethod: "whatsapp" as const,
+    statusToken: createOrderStatusToken(order.id, ""),
+    whatsappUrl: confirmation?.whatsappUrl ?? null,
+    whatsappMessage: confirmation?.message ?? null,
+  };
 }
 
 /**
@@ -172,18 +204,19 @@ async function resumeCheckout(
 
 /**
  * Atomically claim a reward voucher (AANCHAL-*). Returns null if unusable.
+ *
+ * NOTE: used_by_order_id is intentionally NOT written here — it references
+ * public.orders(id) (phase_20), and the order row does not exist yet at claim
+ * time. Setting it here would fail the FK and break every redemption. The
+ * caller stamps it on the voucher after the order row is created.
  */
 async function claimRewardVoucher(
   supabase: Awaited<ReturnType<typeof createServiceClient>>,
-  code: string,
-  orderId: string
+  code: string
 ): Promise<{ ok: true; value: number } | { ok: false; error: string }> {
   const { data: claimed } = await supabase
     .from("reward_vouchers")
-    .update({
-      is_used: true,
-      used_by_order_id: orderId,
-    })
+    .update({ is_used: true })
     .eq("code", code)
     .eq("is_used", false)
     .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
@@ -217,7 +250,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const {
     customer_name,
-    customer_email,
+    customer_email: rawCustomerEmail,
     customer_phone,
     address_line1,
     address_line2,
@@ -232,6 +265,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     cartItems: submittedCartItems,
     idempotency_key,
   } = data;
+
+  // Normalise to lowercase — every other email-based flow (track-order, cancel,
+  // rewards, coupon per-customer limits) compares lowercase, so storing the
+  // customer's raw casing would make orders unfindable.
+  const customer_email = rawCustomerEmail.trim().toLowerCase();
 
   const cartItems = Array.from(
     submittedCartItems
@@ -256,9 +294,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const paytmConfig = getPaytmConfig();
   const paymentGateway: "paytm" | "razorpay" = paytmConfig ? "paytm" : "razorpay";
 
+  // Phase 1 launch flag: WhatsApp/manual confirmation instead of online payment.
+  // The server decides — the browser cannot opt out of the manual flow.
+  const whatsappMode = getCheckoutMode() === "whatsapp";
+  const paymentMethod = payment_method ?? "prepaid";
+
   const razorpayKeyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
   const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
-  if (paymentGateway === "razorpay" && (!razorpayKeyId || !razorpayKeySecret)) {
+  if (!whatsappMode && paymentGateway === "razorpay" && (!razorpayKeyId || !razorpayKeySecret)) {
     console.error("[create-order] Payment credentials missing");
     return NextResponse.json(
       { success: false, error: Messages.paymentNotConfigured },
@@ -268,22 +311,43 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const supabase = await createServiceClient();
 
+  // Normalize the raw composite idempotency key once, then use the same value
+  // for both the resume lookup and the stored row.
+  const normalizedIdempotencyKey = normalizeIdempotencyKey(idempotency_key);
+
   // ── Idempotency — resume an existing pending order for this key ──
-  if (idempotency_key) {
+  if (normalizedIdempotencyKey) {
     const { data: existing } = await supabase
       .from("orders")
       .select(
-        "id, payment_status, payment_method, total_amount, prepaid_amount, cod_amount, discount_amount, customer_name, customer_email, customer_phone, paytm_order_id, razorpay_order_id"
+        "id, order_number, payment_status, payment_method, total_amount, prepaid_amount, cod_amount, discount_amount, customer_name, customer_email, customer_phone, paytm_order_id, razorpay_order_id, confirmation_method"
       )
-      .eq("idempotency_key", idempotency_key)
+      .eq("idempotency_key", normalizedIdempotencyKey)
       .maybeSingle();
 
     if (existing) {
+      // Bind the resume to the email that created the order: the idempotency
+      // key is derived from the customer's own inputs, so a leaked/guessed key
+      // must not let someone read another customer's order details.
+      if (existing.customer_email?.toLowerCase() !== customer_email) {
+        return NextResponse.json(
+          { success: false, error: "This checkout session belongs to another customer." },
+          { status: 403 },
+        );
+      }
+      // Phase 1 WhatsApp orders never enter a payment gateway — resuming simply
+      // returns the same redirect to the order-success page.
+      if (existing.confirmation_method === "whatsapp") {
+        return NextResponse.json({
+          success: true,
+          data: await whatsappResponseData(existing as OrderRow),
+        });
+      }
       return resumeCheckout(supabase, existing as OrderRow, paytmConfig);
     }
   }
 
-  const razorpay = paymentGateway === "razorpay"
+  const razorpay = !whatsappMode && paymentGateway === "razorpay"
     ? new Razorpay({ key_id: razorpayKeyId!, key_secret: razorpayKeySecret! })
     : null;
 
@@ -381,7 +445,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       variant_id: variantId,
       product_name: product.name,
       product_slug: product.slug,
-      image_url: sortedImages[0]?.url ?? null,
+      image_url: getPrimaryStorefrontImage(product.product_images) ?? sortedImages[0]?.url ?? null,
       size,
       color,
       sku,
@@ -409,11 +473,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   // Reward voucher (AANCHAL-*) — atomic one-time claim bound to this order
   if (normalizedCoupon?.startsWith("AANCHAL-")) {
-    const claimed = await claimRewardVoucher(supabase, normalizedCoupon, orderId);
+    const claimed = await claimRewardVoucher(supabase, normalizedCoupon);
     if (!claimed.ok) {
       return NextResponse.json({ success: false, error: claimed.error }, { status: 400 });
     }
-    couponDiscount = Math.min(claimed.value, rawTotal);
+    couponDiscount = Math.min(Math.round(claimed.value), rawTotal);
     rewardVoucherCode = normalizedCoupon;
   } else if (normalizedCoupon) {
     const { data: coupon } = await supabase
@@ -456,7 +520,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         if (coupon.max_discount_amount) {
           couponDiscount = Math.min(couponDiscount, coupon.max_discount_amount);
         }
-        couponDiscount = Math.min(couponDiscount, rawTotal);
+        couponDiscount = Math.min(Math.round(couponDiscount), rawTotal);
         couponId = coupon.id;
       }
     }
@@ -486,24 +550,39 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const totalAfterReferral = totalAfterCoupon - influencerDiscount;
 
   // ── Payment-method specific calculations ──
+  // Money is stored in rupees to 2 decimal places (numeric(10,2) columns).
+  // discountAmount is always derived so the CHECK
+  // total_amount = subtotal + shipping_fee - discount_amount holds exactly.
+  const grossTotal = rawTotal;
+  const totalAfterReferralRounded = Math.round(totalAfterReferral * 100) / 100;
+
   let totalAmount: number;
   let prepaidAmount: number;
   let codAmount: number;
   let prepaidDiscount: number;
   let discountAmount: number;
 
-  if (payment_method === "prepaid") {
-    prepaidDiscount = Math.round(totalAfterReferral * PREPAID_DISCOUNT_RATE);
-    totalAmount = totalAfterReferral - prepaidDiscount;
-    discountAmount = couponDiscount + influencerDiscount + prepaidDiscount;
+  if (whatsappMode) {
+    // Phase 1: no online payment happens on the website, so no prepaid
+    // incentive is applied. The amount shown is what the owner confirms
+    // manually with the customer.
+    totalAmount = totalAfterReferralRounded;
+    prepaidAmount = 0;
+    codAmount = 0;
+    prepaidDiscount = 0;
+    discountAmount = Math.round((grossTotal - totalAmount) * 100) / 100;
+  } else if (paymentMethod === "prepaid") {
+    prepaidDiscount = Math.round(totalAfterReferralRounded * PREPAID_DISCOUNT_RATE * 100) / 100;
+    totalAmount = Math.round((totalAfterReferralRounded - prepaidDiscount) * 100) / 100;
+    discountAmount = Math.round((grossTotal - totalAmount) * 100) / 100;
     prepaidAmount = totalAmount;
     codAmount = 0;
   } else {
-    totalAmount = totalAfterReferral;
-    prepaidAmount = Math.ceil(totalAfterReferral / 2);
-    codAmount = Math.floor(totalAfterReferral / 2);
+    totalAmount = totalAfterReferralRounded;
+    prepaidAmount = Math.ceil((totalAmount * 100) / 2) / 100;
+    codAmount = Math.round((totalAmount - prepaidAmount) * 100) / 100;
     prepaidDiscount = 0;
-    discountAmount = couponDiscount + influencerDiscount;
+    discountAmount = Math.round((grossTotal - totalAmount) * 100) / 100;
   }
 
   // ── Generate payment references ──
@@ -511,10 +590,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   let paytmOrderId: string | null = null;
 
   const adapter = await getProviderAdapter(paymentGateway);
-  const amountPaiseToCharge = rupeesToPaise(payment_method === "prepaid" ? totalAmount : prepaidAmount);
+  const amountPaiseToCharge = rupeesToPaise(paymentMethod === "prepaid" ? totalAmount : prepaidAmount);
 
-  if (adapter && adapter.createOrder) {
-    const createRes = await adapter.createOrder({ amountPaise: amountPaiseToCharge, currency: "INR", receipt: orderId, notes: { customer_name, customer_email, payment_method } });
+  if (whatsappMode) {
+    // No gateway interaction in Phase 1 — the order is confirmed manually.
+  } else if (adapter && adapter.createOrder) {
+    const createRes = await adapter.createOrder({ amountPaise: amountPaiseToCharge, currency: "INR", receipt: orderId, notes: { customer_name, customer_email, payment_method: paymentMethod } });
     if (createRes?.error) {
       console.error("[create-order] Provider createOrder failed:", createRes.error);
       await releaseRewardVoucher(supabase, rewardVoucherCode);
@@ -534,7 +615,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           amount: amountPaiseToCharge,
           currency: "INR",
           receipt: `rcpt_${Date.now()}`,
-          notes: { customer_name, customer_email, payment_method },
+          notes: { customer_name, customer_email, payment_method: paymentMethod },
         });
         razorpayOrderId = razorpayOrder.id;
       } catch (err) {
@@ -570,18 +651,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       discount_amount: discountAmount,
       prepaid_amount: prepaidAmount,
       cod_amount: codAmount,
-      payment_method,
+      payment_method: paymentMethod,
       payment_provider: paymentGateway,
+      confirmation_method: whatsappMode ? "whatsapp" : "payment",
       coupon_id: couponId,
       reward_voucher_code: rewardVoucherCode,
       influencer_code: influencerCode,
       payment_status: "pending",
       order_status: "pending",
-      idempotency_key: idempotency_key ?? null,
+      idempotency_key: normalizedIdempotencyKey,
       razorpay_order_id: razorpayOrderId,
       paytm_order_id: paytmOrderId,
     })
-    .select("id")
+    .select("id, order_number")
     .single();
 
   if (!order) {
@@ -590,6 +672,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       { success: false, error: Messages.orderCreateError },
       { status: 500 },
     );
+  }
+
+  // ── Stamp the voucher with the order now that the row exists (FK on
+  //    used_by_order_id → orders.id). Best-effort: the voucher is already
+  //    atomically claimed; this only fills in the audit reference. ──
+  if (rewardVoucherCode) {
+    await supabase
+      .from("reward_vouchers")
+      .update({ used_by_order_id: order.id })
+      .eq("code", rewardVoucherCode)
+      .eq("is_used", true);
   }
 
   // ── Insert order items ──
@@ -631,15 +724,25 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       old_status: null,
       new_status: "pending",
       changed_by: "system",
-      notes: "Order placed",
+      notes: whatsappMode
+        ? "Order request placed — awaiting WhatsApp confirmation"
+        : "Order placed",
     }),
   ]);
+
+  // ── Phase 1: WhatsApp confirmation — no payment gateway involved ──
+  if (whatsappMode) {
+    return NextResponse.json({
+      success: true,
+      data: await whatsappResponseData({ id: order.id, order_number: order.order_number }),
+    });
+  }
 
   // ── Initiate payment after the order exists ──
   if (paymentGateway === "paytm") {
     const initiated = await initiateTransaction(paytmConfig!, {
       paytmOrderId: paytmOrderId!,
-      amountPaise: rupeesToPaise(payment_method === "prepaid" ? totalAmount : prepaidAmount),
+      amountPaise: rupeesToPaise(paymentMethod === "prepaid" ? totalAmount : prepaidAmount),
       customerId: customer_email,
       mobileNumber: customer_phone,
       email: customer_email,
@@ -663,7 +766,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const finalOrder: OrderRow = {
       id: order.id,
       payment_status: "pending",
-      payment_method,
+      payment_method: paymentMethod,
       total_amount: totalAmount,
       prepaid_amount: prepaidAmount,
       cod_amount: codAmount,
@@ -677,7 +780,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json({
       success: true,
-      data: checkoutResponseData(finalOrder, "paytm", rupeesToPaise(payment_method === "prepaid" ? totalAmount : prepaidAmount), {
+      data: checkoutResponseData(finalOrder, "paytm", rupeesToPaise(paymentMethod === "prepaid" ? totalAmount : prepaidAmount), {
         paytm: {
           paytmOrderId: paytmOrderId!,
           txnToken: initiated.txnToken,
@@ -690,7 +793,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const finalOrder: OrderRow = {
     id: order.id,
     payment_status: "pending",
-    payment_method,
+    payment_method: paymentMethod,
     total_amount: totalAmount,
     prepaid_amount: prepaidAmount,
     cod_amount: codAmount,
@@ -704,7 +807,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   return NextResponse.json({
     success: true,
-    data: checkoutResponseData(finalOrder, "razorpay", rupeesToPaise(payment_method === "prepaid" ? totalAmount : prepaidAmount), {
+    data: checkoutResponseData(finalOrder, "razorpay", rupeesToPaise(paymentMethod === "prepaid" ? totalAmount : prepaidAmount), {
       razorpayOrderId: razorpayOrderId!,
     }),
   });

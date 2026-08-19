@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Minus, Plus, ShoppingBag, Shield, Truck, RotateCcw,
-  Ruler, Check, AlertTriangle
+  Ruler, Check, AlertTriangle, Package
 } from "lucide-react";
 import type { ProductWithDetails, ProductReview } from "@/types";
 import { useCart } from "@/context/CartContext";
@@ -18,6 +18,7 @@ import { ProductRating } from "@/components/product/ProductRating";
 import { ReviewForm } from "@/components/product/ReviewForm";
 import { WishlistButton } from "@/components/product/WishlistButton";
 import { RecentlyViewed } from "@/components/product/RecentlyViewed";
+import { getStorefrontImages, getPrimaryStorefrontImage, type ProductImageRef } from "@/lib/product-images";
 
 interface ProductDetailProps {
   product: ProductWithDetails;
@@ -46,9 +47,11 @@ export function ProductDetail({ product, relatedProducts = [] }: ProductDetailPr
     }
   }, [product.id, product.slug, user, recordView]);
 
-  const images = product.product_images?.length
-    ? product.product_images
-    : [{ id: "placeholder", url: "/images/product-placeholder.svg", alt_text: product.name }];
+  const allImages = product.product_images ?? [];
+  const images: ProductImageRef[] = allImages.length
+    ? getStorefrontImages(allImages)
+    : [{ id: "placeholder", url: "/images/product-placeholder.svg", alt_text: product.name, position: 0 }];
+  const primaryImageUrl = getPrimaryStorefrontImage(allImages) ?? images[0]?.url ?? null;
 
   const [selectedImage, setSelectedImage] = useState(0);
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
@@ -81,8 +84,14 @@ export function ProductDetail({ product, relatedProducts = [] }: ProductDetailPr
   const category = product.category;
   const uniqueColors = [...new Set(activeVariants.map((v) => v.color).filter(Boolean))];
 
+  const firstAvailable = activeVariants.find((v) => v.stock > 0);
+  const allOutOfStock = !firstAvailable;
+  // Default to the first in-stock variant so single-variant products work and
+  // add-to-cart never silently picks an out-of-stock first variant.
+  const effectiveVariant = selectedVariant ?? firstAvailable ?? null;
+
   const addToCart = () => {
-    const variant = selectedVariant || activeVariants[0];
+    const variant = effectiveVariant;
     if (!variant || variant.stock <= 0) return;
 
     addItem({
@@ -90,7 +99,7 @@ export function ProductDetail({ product, relatedProducts = [] }: ProductDetailPr
       product_id: product.id,
       product_name: product.name,
       product_slug: product.slug,
-      image_url: images[0]?.url || null,
+      image_url: primaryImageUrl,
       selected_size: variant.size ?? null,
       selected_color: variant.color ?? null,
       sku: variant.sku ?? null,
@@ -104,7 +113,7 @@ export function ProductDetail({ product, relatedProducts = [] }: ProductDetailPr
   };
 
   const buyNow = () => {
-    const variant = selectedVariant || activeVariants[0];
+    const variant = effectiveVariant;
     if (!variant || variant.stock <= 0) return;
 
     addItem({
@@ -112,7 +121,7 @@ export function ProductDetail({ product, relatedProducts = [] }: ProductDetailPr
       product_id: product.id,
       product_name: product.name,
       product_slug: product.slug,
-      image_url: images[0]?.url || null,
+      image_url: primaryImageUrl,
       selected_size: variant.size ?? null,
       selected_color: variant.color ?? null,
       sku: variant.sku ?? null,
@@ -128,9 +137,6 @@ export function ProductDetail({ product, relatedProducts = [] }: ProductDetailPr
     setSelectedVariantId(variantId);
     setAddedToCart(false);
   };
-
-  const firstAvailable = activeVariants.find((v) => v.stock > 0);
-  const allOutOfStock = !firstAvailable;
 
   return (
     <>
@@ -250,22 +256,22 @@ export function ProductDetail({ product, relatedProducts = [] }: ProductDetailPr
             )}
 
             {product.description && (
-              <p className="mt-6 text-sm leading-relaxed text-[#6B6B6B] whitespace-pre-wrap">
+              <p className="mt-6 text-sm leading-relaxed text-[#4A4A4A] whitespace-pre-wrap">
                 {product.description}
               </p>
             )}
 
             <div className="mt-6 space-y-5">
-              {/* Color selector */}
+              {/* Variant selector */}
               {uniqueColors.length > 0 && (
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wider text-[#6B6B6B]">
-                    Colour
+                    Variants
                     {selectedVariant?.color && (
                       <span className="ml-1 lowercase normal-case text-[#1C1C1C]">— {selectedVariant.color}</span>
                     )}
                   </p>
-                  <div className="mt-2 flex flex-wrap gap-2" role="radiogroup" aria-label="Colour selection">
+                  <div className="mt-2 flex flex-wrap gap-2" role="radiogroup" aria-label="Variant selection">
                     {uniqueColors.map((color) => {
                       const variant = activeVariants.find((v) => v.color === color);
                       const isDisabled = !variant || variant.stock <= 0;
@@ -281,7 +287,7 @@ export function ProductDetail({ product, relatedProducts = [] }: ProductDetailPr
                           disabled={isDisabled}
                           role="radio"
                           aria-checked={selectedVariant?.color === color}
-                          aria-label={`Colour: ${color}${isDisabled ? " (sold out)" : ""}`}
+                          aria-label={`Variant: ${color}${isDisabled ? " (sold out)" : ""}`}
                           className={`relative rounded-sm border px-4 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-[#800020] ${
                             isDisabled
                               ? "border-[#E5D5C5] text-[#BDBDBD] cursor-not-allowed line-through"
@@ -336,8 +342,8 @@ export function ProductDetail({ product, relatedProducts = [] }: ProductDetailPr
                   </span>
                   <button
                     type="button"
-                    onClick={() => setQuantity(Math.min(quantity + 1, selectedVariant?.stock ?? 10, 10))}
-                    disabled={!selectedVariant || quantity >= Math.min(selectedVariant.stock, 10)}
+                    onClick={() => setQuantity(Math.min(quantity + 1, effectiveVariant?.stock ?? 10, 10))}
+                    disabled={!effectiveVariant || quantity >= Math.min(effectiveVariant.stock, 10)}
                     className="flex h-10 w-10 items-center justify-center text-[#6B6B6B] hover:text-[#1C1C1C] hover:bg-[#FFF0E8] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                     aria-label="Increase quantity"
                   >
@@ -395,7 +401,14 @@ export function ProductDetail({ product, relatedProducts = [] }: ProductDetailPr
                 <Check className="mt-0.5 h-4 w-4 text-[#800020]" />
                 <div>
                   <p className="text-sm font-medium text-[#1C1C1C]">Secure Checkout</p>
-                  <p className="text-xs text-[#6B6B6B]">100% secure payment via Razorpay</p>
+                  <p className="text-xs text-[#6B6B6B]">100% secure payment gateway</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <Package className="mt-0.5 h-4 w-4 text-[#800020]" />
+                <div>
+                  <p className="text-sm font-medium text-[#1C1C1C]">Signature Packaging</p>
+                  <p className="text-xs text-[#6B6B6B]">Every order arrives in our signature gift-worthy packaging</p>
                 </div>
               </div>
             </div>

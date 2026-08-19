@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Messages } from "@/lib/messages";
 import { createServiceClient } from "@/lib/supabase/server";
-import { requireAdmin } from "@/lib/api-utils";
+import { requireAdmin, checkSameOrigin } from "@/lib/api-utils";
 
 const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
@@ -9,6 +9,8 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024;
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const auth = await requireAdmin();
   if (auth instanceof NextResponse) return auth;
+  const csrf = checkSameOrigin(request);
+  if (csrf) return csrf;
 
   let formData: FormData;
   try {

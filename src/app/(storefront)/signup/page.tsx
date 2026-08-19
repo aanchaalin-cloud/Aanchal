@@ -10,6 +10,7 @@ export default function SignupPage() {
   const router = useRouter();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -33,6 +34,10 @@ export default function SignupPage() {
       setError("Enter a valid 10-digit Indian mobile number.");
       return;
     }
+    if (username && !/^[a-z0-9_]{3,20}$/.test(username)) {
+      setError("Username must be 3-20 characters: lowercase letters, numbers, underscores.");
+      return;
+    }
 
     setLoading(true);
     try {
@@ -43,6 +48,7 @@ export default function SignupPage() {
           full_name: fullName,
           email,
           phone: phone || undefined,
+          username: username || undefined,
           password,
         }),
       });
@@ -114,6 +120,24 @@ export default function SignupPage() {
               className="w-full rounded border border-[#D4C5B5] bg-white px-3 py-2 text-sm text-[#1C1C1C] placeholder-[#6B6B6B] focus:outline-none focus:ring-2 focus:ring-[#800020]"
               placeholder="you@email.com"
             />
+          </div>
+
+          <div>
+            <label htmlFor="username" className="mb-1 block text-xs font-medium text-[#6B6B6B]">
+              Username (optional)
+            </label>
+            <input
+              id="username"
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              autoComplete="username"
+              className="w-full rounded border border-[#D4C5B5] bg-white px-3 py-2 text-sm text-[#1C1C1C] placeholder-[#6B6B6B] focus:outline-none focus:ring-2 focus:ring-[#800020]"
+              placeholder="e.g. priya_sharma"
+            />
+            <p className="mt-1 text-[10px] text-[#6B6B6B]">
+              Lowercase letters, numbers, underscores — 3-20 characters. You can sign in with it.
+            </p>
           </div>
 
           <div>

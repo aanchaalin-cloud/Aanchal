@@ -8,7 +8,9 @@ import { Button } from "@/components/ui/Button";
 export default function InfluencerApplyPage() {
   const [socialHandle, setSocialHandle] = useState("");
   const [platform, setPlatform] = useState("Instagram");
+  const [niche, setNiche] = useState("");
   const [followers, setFollowers] = useState("");
+  const [desiredPromoCode, setDesiredPromoCode] = useState("");
   const [bio, setBio] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -26,7 +28,9 @@ export default function InfluencerApplyPage() {
         body: JSON.stringify({
           social_handle: socialHandle,
           platform,
+          niche: niche || undefined,
           followers: followers || undefined,
+          desired_promo_code: desiredPromoCode || undefined,
           bio,
         }),
       });
@@ -111,6 +115,28 @@ export default function InfluencerApplyPage() {
           </div>
 
           <div>
+            <label htmlFor="niche" className="mb-1 block text-xs font-medium text-[#6B6B6B]">
+              Content Niche
+            </label>
+            <select
+              id="niche"
+              value={niche}
+              onChange={(e) => setNiche(e.target.value)}
+              required
+              className="w-full rounded border border-[#D4C5B5] bg-white px-3 py-2 text-sm text-[#1C1C1C] focus:outline-none focus:ring-2 focus:ring-[#800020]"
+            >
+              <option value="">Select a niche</option>
+              <option value="Fashion & Style">Fashion & Style</option>
+              <option value="Beauty & Makeup">Beauty & Makeup</option>
+              <option value="Lifestyle & Vlogs">Lifestyle & Vlogs</option>
+              <option value="Fitness & Wellness">Fitness & Wellness</option>
+              <option value="Wedding & Festive">Wedding & Festive</option>
+              <option value="Dance & Performing">Dance & Performing</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+          <div>
             <label htmlFor="followers" className="mb-1 block text-xs font-medium text-[#6B6B6B]">
               Approximate Followers (optional)
             </label>
@@ -123,6 +149,24 @@ export default function InfluencerApplyPage() {
               className="w-full rounded border border-[#D4C5B5] bg-white px-3 py-2 text-sm text-[#1C1C1C] placeholder-[#6B6B6B] focus:outline-none focus:ring-2 focus:ring-[#800020]"
               placeholder="e.g. 5,000"
             />
+          </div>
+
+          <div>
+            <label htmlFor="promo-code" className="mb-1 block text-xs font-medium text-[#6B6B6B]">
+              Desired Promo Code (optional)
+            </label>
+            <input
+              id="promo-code"
+              type="text"
+              value={desiredPromoCode}
+              onChange={(e) => setDesiredPromoCode(e.target.value.toUpperCase())}
+              autoComplete="off"
+              className="w-full rounded border border-[#D4C5B5] bg-white px-3 py-2 text-sm text-[#1C1C1C] placeholder-[#6B6B6B] focus:outline-none focus:ring-2 focus:ring-[#800020]"
+              placeholder="e.g. PRIYA10"
+            />
+            <p className="mt-1 text-[10px] text-[#6B6B6B]">
+              A code your followers can use at checkout. We&apos;ll confirm availability before assigning it.
+            </p>
           </div>
 
           <div>

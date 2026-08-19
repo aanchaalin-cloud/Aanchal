@@ -157,6 +157,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
   }
 
+  // ── Return any reward voucher used on this order so it can be reused.
+  //    Best-effort: a voucher is claimed by exactly one order (used_by_order_id
+  //    FK), so resetting it here can only affect the cancelled order. ──
+  await supabase
+    .from("reward_vouchers")
+    .update({ is_used: false, used_by_order_id: null })
+    .eq("used_by_order_id", order.id)
+    .eq("is_used", true);
+
   // ── Notify the customer ──
   await sendOrderEvent({
     type: "order_cancelled",

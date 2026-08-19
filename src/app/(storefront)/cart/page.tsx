@@ -85,7 +85,7 @@ export default function CartPage() {
                       <span>Size: {item.selected_size}</span>
                     )}
                     {item.selected_color && (
-                      <span>Colour: {item.selected_color}</span>
+                      <span>Variant: {item.selected_color}</span>
                     )}
                     {item.sku && <span>SKU: {item.sku}</span>}
                   </div>
@@ -178,7 +178,7 @@ export default function CartPage() {
               </div>
               <div className="flex justify-between text-[#6B6B6B]">
                 <span>Shipping</span>
-                <span className="text-[#800020]">Calculated at checkout</span>
+                <span className="font-medium text-[#800020]">Free</span>
               </div>
               <div className="border-t border-[#E5D5C5]/50 pt-3 flex justify-between font-semibold text-[#1C1C1C]">
                 <span>Estimated Total</span>
@@ -187,7 +187,7 @@ export default function CartPage() {
             </div>
 
             <p className="mt-3 text-xs text-[#6B6B6B]">
-              Final price verified at checkout. Standard shipping applies on all orders.
+              Final price verified at checkout. Shipping is free on all orders across India.
             </p>
 
             <div className="mt-5">

@@ -3,23 +3,28 @@ import crypto from "crypto";
 import { hmacHex, timingSafeEqualHex } from "@/lib/crypto";
 import { createServiceClient } from "@/lib/supabase/server";
 import { Messages } from "@/lib/messages";
-import { createInfluencerEarnings } from "@/lib/orders/influencer-earnings";
-import { decrementStockForItems, incrementStockForItems } from "@/lib/stock";
+import { finalizePaidOrder } from "@/lib/orders/finalize-payment";
+import { rupeesToPaise } from "@/lib/utils";
 import { info, warn, error as logError } from "@/lib/logger";
 
 /**
- * Razorpay webhook handler.
+ * Razorpay webhook handler (fallback gateway).
  *
  * Receives payment.captured events from Razorpay and finalises the order
  * (idempotent — safe if browser verify-payment has already processed it).
+ *
+ * Finalisation runs through the shared finalizePaidOrder() so the payment
+ * method model (full prepaid vs 50/50 COD) is honoured exactly like the
+ * Paytm path: prepaid orders become "paid", COD orders become
+ * "partially_paid" with the COD remainder recorded.
  *
  * Webhook signature is verified using RAZORPAY_WEBHOOK_SECRET.
  * Configure this URL in the Razorpay Dashboard → Settings → Webhooks.
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  try {
-    const traceId = request.headers.get("x-request-id") ?? crypto.randomUUID();
+  const traceId = request.headers.get("x-request-id") ?? crypto.randomUUID();
 
+  try {
     const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
     if (!webhookSecret) {
       logError("RAZORPAY_WEBHOOK_SECRET not configured", { traceId });
@@ -76,7 +81,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const { data: order, error: orderError } = await supabase
       .from("orders")
-      .select("id, payment_status, order_items(variant_id, quantity)")
+      .select(
+        "id, customer_name, customer_email, customer_phone, payment_method, payment_status, order_status, total_amount, prepaid_amount, order_items(variant_id, quantity)"
+      )
       .eq("razorpay_order_id", razorpayOrderId)
       .single();
 
@@ -88,68 +95,54 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // 5. Idempotency — already paid
-    if (order.payment_status === "paid") {
+    // 5. Idempotency — already processed
+    if (order.payment_status === "paid" || order.payment_status === "partially_paid") {
       return NextResponse.json({ status: "already_processed" });
     }
 
-    // 6. Decrement stock atomically (parallelized)
-    const orderItems = order.order_items as Array<{
-      variant_id: string | null;
-      quantity: number;
-    }>;
+    // 6. Amount + currency verification (server-authoritative)
+    const expectedPaise =
+      order.payment_method === "cod"
+        ? rupeesToPaise(Number(order.prepaid_amount))
+        : rupeesToPaise(Number(order.total_amount));
 
-    const stockItems = orderItems.filter((item): item is { variant_id: string; quantity: number } => Boolean(item.variant_id));
+    if (payment.amount != null) {
+      if (Number(payment.amount) !== expectedPaise) {
+        warn("Amount mismatch", { traceId, orderId: order.id, expectedPaise, paidPaise: Number(payment.amount) });
+        return NextResponse.json({ error: "Amount mismatch" }, { status: 400 });
+      }
+      if (payment.currency && payment.currency !== "INR") {
+        warn("Currency mismatch", { traceId, orderId: order.id, currency: payment.currency });
+        return NextResponse.json({ error: "Currency mismatch" }, { status: 400 });
+      }
+    }
 
-    const stockResults = await decrementStockForItems(supabase, stockItems);
+    // 7. Finalise via the shared idempotent path (stock, status, history,
+    //    influencer earnings and the order_confirmed email).
+    const result = await finalizePaidOrder(
+      order.id,
+      "razorpay",
+      razorpayPaymentId,
+      { ...order, order_status: order.order_status ?? undefined }
+    );
 
-    const failedStock = stockResults.filter((r) => !r.success);
-
-    // 7. Roll back on failure
-    if (failedStock.length > 0) {
-      const succeeded = stockResults.filter((r) => r.success);
-      await incrementStockForItems(
-        supabase,
-        succeeded.map((r) => ({ variantId: r.variantId, quantity: r.quantity }))
-      );
-
-      logError("Stock decrement failed for order", {
+    if (!result.success) {
+      logError("Finalise failed for order", {
         traceId,
         orderId: order.id,
-        errors: failedStock.map((f) => f.error),
+        error: result.error,
+        code: result.code,
       });
-
       return NextResponse.json(
         { error: Messages.genericError },
-        { status: 409 }
+        { status: result.code === "INSUFFICIENT_STOCK" ? 409 : 500 }
       );
     }
-
-    // 8. Mark order as paid
-    const { error: updateError } = await supabase
-      .from("orders")
-      .update({
-        payment_status: "paid",
-        order_status: "confirmed",
-        razorpay_payment_id: razorpayPaymentId,
-      })
-      .eq("id", order.id)
-      .eq("payment_status", "pending");
-
-    if (updateError) {
-      logError("Failed to update order", { traceId, orderId: order.id, error: updateError.message });
-      return NextResponse.json(
-        { error: "Failed to update order" },
-        { status: 500 }
-      );
-    }
-
-    await createInfluencerEarnings(order.id);
 
     info("Webhook processed successfully", { traceId, orderId: order.id, razorpayOrderId, razorpayPaymentId });
     return NextResponse.json({ status: "processed" });
   } catch (error) {
-    logError("Unexpected webhook error", { traceId: request ? undefined : undefined, error: error instanceof Error ? error.message : String(error) });
+    logError("Unexpected webhook error", { traceId, error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json(
       { error: Messages.genericError },
       { status: 500 }

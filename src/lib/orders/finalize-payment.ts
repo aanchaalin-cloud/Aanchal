@@ -24,6 +24,7 @@ export async function finalizePaidOrder(
   providerPaymentId: string | null,
   orderData?: {
     id: string;
+    order_number?: string | null;
     customer_name?: string;
     customer_email?: string;
     customer_phone?: string;
@@ -41,7 +42,7 @@ export async function finalizePaidOrder(
       (await supabase
         .from("orders")
         .select(
-          "id, customer_name, customer_email, customer_phone, payment_method, payment_status, order_status, order_items(variant_id, quantity)"
+          "id, order_number, customer_name, customer_email, customer_phone, payment_method, payment_status, order_status, order_items(variant_id, quantity)"
         )
         .eq("id", orderId)
         .single())
@@ -58,7 +59,22 @@ export async function finalizePaidOrder(
   }
 
   // ── Decrement stock atomically ──
-  const orderItems = order.order_items as Array<{ variant_id: string | null; quantity: number }>;
+  // Callers may pass a partial order snapshot without order_items (e.g. the
+  // browser verify-payment and Paytm callback paths). Always fetch the items
+  // fresh so stock handling never depends on the caller's select.
+  let orderItems = order.order_items as Array<{ variant_id: string | null; quantity: number }> | undefined;
+  if (!orderItems && orderData) {
+    const { data: items } = await supabase
+      .from("orders")
+      .select("order_items(variant_id, quantity)")
+      .eq("id", orderId)
+      .single();
+    orderItems = items?.order_items as Array<{ variant_id: string | null; quantity: number }> | undefined;
+  }
+  if (!orderItems || orderItems.length === 0) {
+    return { success: false, error: "Order has no items" };
+  }
+
   const stockItems = orderItems.filter((item) => item.variant_id) as StockItem[];
 
   const stockResults = await decrementStockForItems(supabase, stockItems);
@@ -128,6 +144,7 @@ export async function finalizePaidOrder(
   await sendOrderEvent({
     type: "order_confirmed",
     orderId,
+    orderNumber: order.order_number,
     customerEmail: order.customer_email,
     customerName: order.customer_name,
   });

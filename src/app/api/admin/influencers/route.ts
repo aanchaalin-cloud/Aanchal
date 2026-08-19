@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { Messages } from "@/lib/messages";
-import { requireAdmin } from "@/lib/api-utils";
+import { requireAdmin, checkSameOrigin } from "@/lib/api-utils";
 import { z } from "zod";
 import crypto from "crypto";
 
@@ -36,7 +36,8 @@ export async function GET(): Promise<NextResponse> {
     .from("influencer_profiles")
     .select(
       `
-      id, referral_code, status, social_handle, platform, followers, bio, notes,
+      id, referral_code, status, social_handle, platform, followers, bio, niche,
+      desired_promo_code, notes,
       created_at, reviewed_at,
       customers ( id, full_name, email, phone )
     `
@@ -78,6 +79,8 @@ export async function GET(): Promise<NextResponse> {
 export async function PUT(request: NextRequest): Promise<NextResponse> {
   const auth = await requireAdmin();
   if (auth instanceof NextResponse) return auth;
+  const csrf = checkSameOrigin(request);
+  if (csrf) return csrf;
 
   let body: unknown;
   try {
@@ -100,7 +103,7 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
 
   const { data: existing } = await supabase
     .from("influencer_profiles")
-    .select("id, status, referral_code, customers(full_name)")
+    .select("id, status, referral_code, desired_promo_code, customers(full_name)")
     .eq("id", influencerId)
     .single();
 
@@ -128,9 +131,26 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ success: true, data: { message: "Application rejected." } });
   }
 
-  // Approve → generate a referral code
+  // Approve → generate a referral code, honouring the influencer's requested
+  // promo code when available and unused.
   const fullName = (existing.customers as unknown as { full_name?: string } | null)?.full_name ?? "AANCHAL";
-  let referralCode = existing.referral_code ?? generateReferralCode(fullName);
+  let referralCode = existing.referral_code ?? null;
+  const desiredCode = existing.desired_promo_code;
+
+  if (!referralCode && desiredCode) {
+    // Normalise to uppercase: checkout stores the code uppercased and
+    // orders.influencer_code has a case-sensitive FK to referral_code, so a
+    // lower/mixed-case desired code would break every order that uses it.
+    const normalized = desiredCode.trim().toUpperCase();
+    const { data: clash } = await supabase
+      .from("influencer_profiles")
+      .select("id")
+      .eq("referral_code", normalized)
+      .maybeSingle();
+    if (!clash) referralCode = normalized;
+  }
+
+  if (!referralCode) referralCode = generateReferralCode(fullName);
 
   // Ensure uniqueness
   const { data: clash } = await supabase

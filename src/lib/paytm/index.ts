@@ -2,6 +2,7 @@ import "server-only";
 
 import crypto from "node:crypto";
 import { timingSafeEqualUtf8 } from "@/lib/crypto";
+import { warn } from "@/lib/logger";
 
 /**
  * Paytm Payment Gateway integration.
@@ -87,6 +88,35 @@ export function verifyCallbackChecksum(
 }
 
 /**
+ * Verify a Paytm API response's `head.signature` over its own `body`.
+ *
+ * Paytm signs the serialized body (exact key order as received), so the raw
+ * response text is parsed once and the body re-serialized for verification.
+ *
+ * Returns:
+ *   true  — signature present and valid
+ *   false — signature present but INVALID (tampered / broken response)
+ *   null  — no signature present (transport is HTTPS; warn-and-continue)
+ *
+ * Callers fail closed when a signature is present but invalid.
+ */
+export function verifyResponseSignature(
+  rawText: string,
+  merchantKey: string
+): boolean | null {
+  let json: { head?: { signature?: string }; body?: unknown } | null = null;
+  try {
+    json = JSON.parse(rawText);
+  } catch {
+    return null;
+  }
+  const signature = json?.head?.signature;
+  if (!signature) return null;
+  if (json?.body === undefined) return false;
+  return verifySignature(JSON.stringify(json.body), merchantKey, signature);
+}
+
+/**
  * Build a Paytm order ID from a local order UUID.
  * Paytm charset: [A-Za-z0-9_@-], max 50 chars, single-use per attempt.
  * `attempt` lets a retry create a fresh Paytm order for the same local order.
@@ -151,10 +181,22 @@ export async function initiateTransaction(
     }
   );
 
-  const json = await res.json().catch(() => null);
+  const rawText = await res.text();
+  let json: { body?: { txnToken?: string; resultInfo?: { resultStatus?: string; resultCode?: string; resultMsg?: string }; resultMsg?: string } } | null = null;
+  try {
+    json = JSON.parse(rawText);
+  } catch {
+    json = null;
+  }
+
+  const responseSigOk = verifyResponseSignature(rawText, config.merchantKey);
+  if (responseSigOk === false) {
+    warn("Initiate transaction response signature invalid", { paytmOrderId: params.paytmOrderId });
+  }
+
   const resultInfo = json?.body?.resultInfo;
 
-  if (!res.ok || !json?.body?.txnToken) {
+  if (!res.ok || !json?.body?.txnToken || responseSigOk === false) {
     return {
       success: false,
       resultStatus: resultInfo?.resultStatus ?? "F",
@@ -208,10 +250,33 @@ export async function getTransactionStatus(
     cache: "no-store",
   });
 
-  const json = await res.json().catch(() => null);
+  const rawText = await res.text();
+  let json: {
+    body?: {
+      resultInfo?: { resultStatus?: string; resultCode?: string; resultMsg?: string };
+      orderId?: string;
+      txnId?: string;
+      txnAmount?: string;
+      bankTxnId?: string;
+    };
+  } | null = null;
+  try {
+    json = JSON.parse(rawText);
+  } catch {
+    json = null;
+  }
+
+  // Fail closed if the status response carries an invalid signature — the
+  // status API is the server-authoritative re-confirmation, so a tampered
+  // response must never be trusted.
+  const responseSigOk = verifyResponseSignature(rawText, config.merchantKey);
+  if (responseSigOk === false) {
+    warn("Transaction status response signature invalid", { paytmOrderId });
+  }
+
   const resultInfo = json?.body?.resultInfo;
 
-  if (!res.ok || !resultInfo) {
+  if (!res.ok || !resultInfo || responseSigOk === false || !json?.body) {
     return {
       success: false,
       resultCode: resultInfo?.resultCode ?? "400",
@@ -219,15 +284,16 @@ export async function getTransactionStatus(
     };
   }
 
+  const responseBody = json.body;
   return {
     success: true,
     resultStatus: resultInfo.resultStatus,
     resultCode: resultInfo.resultCode,
     resultMsg: resultInfo.resultMsg,
-    orderId: json.body.orderId,
-    txnId: json.body.txnId,
-    txnAmount: json.body.txnAmount,
-    bankTxnId: json.body.bankTxnId,
+    orderId: responseBody.orderId,
+    txnId: responseBody.txnId,
+    txnAmount: responseBody.txnAmount,
+    bankTxnId: responseBody.bankTxnId,
   };
 }
 

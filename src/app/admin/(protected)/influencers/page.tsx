@@ -11,6 +11,8 @@ type InfluencerProfile = {
   social_handle: string;
   platform: string;
   followers: string | null;
+  niche: string | null;
+  desired_promo_code: string | null;
   bio: string;
   notes: string | null;
   created_at: string;
@@ -129,6 +131,16 @@ export default function AdminInfluencersPage() {
                     {p.customers?.full_name ?? "Unknown"} · {p.social_handle}
                   </p>
                   <p className="text-xs text-stone-500">{p.customers?.email ?? ""}</p>
+                  {p.niche && (
+                    <p className="text-xs text-stone-600">
+                      Niche: <span className="font-medium">{p.niche}</span>
+                    </p>
+                  )}
+                  {p.desired_promo_code && (
+                    <p className="text-xs text-stone-600">
+                      Desired code: <span className="font-mono font-medium">{p.desired_promo_code}</span>
+                    </p>
+                  )}
                   <p className="text-sm text-stone-600 italic">{p.bio}</p>
                   <p className="text-[10px] text-stone-400">
                     Applied: {new Date(p.created_at).toLocaleString("en-IN")}

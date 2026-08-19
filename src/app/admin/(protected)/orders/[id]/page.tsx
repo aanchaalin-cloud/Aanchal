@@ -1,9 +1,10 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getOrderByIdAdmin, getOrderStatusHistory } from "@/lib/queries/orders";
-import { formatPrice, formatDate, getOrderStatusLabel, getOrderStatusColor, getPaymentStatusColor, getPaymentMethodLabel } from "@/lib/utils";
+import { formatPrice, formatDate, getOrderStatusLabel, getOrderStatusColor, getPaymentStatusColor, getPaymentMethodLabel, getConfirmationMethodLabel, getConfirmationMethodColor } from "@/lib/utils";
 import { OrderStatusUpdater } from "@/components/admin/OrderStatusUpdater";
 import { CreateShipmentButton } from "@/components/admin/CreateShipmentButton";
+import { GenerateLabelButton } from "@/components/admin/GenerateLabelButton";
 import { Ruler, FileText } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +24,9 @@ export default async function AdminOrderDetailPage({ params }: Props) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <Link href="/admin/orders" className="text-sm text-stone-600 hover:text-stone-900">← Back to Orders</Link>
-          <h1 className="mt-1 text-2xl font-semibold text-stone-900">Order {order.id.slice(0, 8)}…</h1>
+          <h1 className="mt-1 text-2xl font-semibold text-stone-900">
+            {order.order_number ?? `Order ${order.id.slice(0, 8)}…`}
+          </h1>
         </div>
         <OrderStatusUpdater
           orderId={order.id}
@@ -31,7 +34,22 @@ export default async function AdminOrderDetailPage({ params }: Props) {
           packagingStatus={order.packaging_status}
         />
         <CreateShipmentButton orderId={order.id} />
+        {order.shiprocket_shipment_id && <GenerateLabelButton orderId={order.id} />}
       </div>
+
+      {order.confirmation_method === "whatsapp" && (
+        <div className="rounded-sm border border-green-200 bg-green-50 p-4 text-sm">
+          <p className="font-medium text-green-900">
+            WhatsApp-confirmed order — no online payment
+          </p>
+          <p className="mt-1 text-green-800">
+            This order was placed without an online payment. The customer confirms
+            payment directly with you on WhatsApp. Mark it <strong>confirmed</strong> once
+            the payment/order is confirmed. Payment status will stay &quot;pending&quot; until you
+            confirm it manually.
+          </p>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Order Info */}
@@ -78,8 +96,26 @@ export default async function AdminOrderDetailPage({ params }: Props) {
                 <p className="text-stone-600">Payment Status</p>
                 <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${getPaymentStatusColor(order.payment_status)}`}>{order.payment_status}</span>
               </div>
-              <div><p className="text-stone-600">Paid Online</p><p className="font-medium">{formatPrice(order.prepaid_amount)}</p></div>
-              <div><p className="text-stone-600">COD Due</p><p className="font-medium">{formatPrice(order.cod_amount)}</p></div>
+              <div>
+                <p className="text-stone-600">Confirmation</p>
+                <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${getConfirmationMethodColor(order.confirmation_method)}`}>
+                  {getConfirmationMethodLabel(order.confirmation_method)}
+                </span>
+              </div>
+              {order.confirmation_method === "whatsapp" ? (
+                <div className="col-span-2 rounded-sm bg-green-50 border border-green-200 p-3">
+                  <p className="text-xs text-green-900">
+                    No online payment was taken. Payment is confirmed separately with the
+                    customer (e.g. via WhatsApp). Use <strong>Order Status → Confirmed</strong>{" "}
+                    once confirmed.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div><p className="text-stone-600">Paid Online</p><p className="font-medium">{formatPrice(order.prepaid_amount)}</p></div>
+                  <div><p className="text-stone-600">COD Due</p><p className="font-medium">{formatPrice(order.cod_amount)}</p></div>
+                </>
+              )}
               {order.razorpay_order_id && <div className="col-span-2"><p className="text-stone-600">Razorpay Order</p><p className="font-mono text-xs break-all">{order.razorpay_order_id}</p></div>}
               {order.razorpay_payment_id && <div className="col-span-2"><p className="text-stone-600">Razorpay Payment</p><p className="font-mono text-xs break-all">{order.razorpay_payment_id}</p></div>}
             </div>
@@ -95,20 +131,20 @@ export default async function AdminOrderDetailPage({ params }: Props) {
               <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
                 <div>
                   <p className="text-stone-600">Chest</p>
-                  <p className="font-medium">{order.order_measurements.chest} cm</p>
+                  <p className="font-medium">{order.order_measurements.chest} in</p>
                 </div>
                 <div>
                   <p className="text-stone-600">Waist</p>
-                  <p className="font-medium">{order.order_measurements.waist} cm</p>
+                  <p className="font-medium">{order.order_measurements.waist} in</p>
                 </div>
                 <div>
                   <p className="text-stone-600">Full Height</p>
-                  <p className="font-medium">{order.order_measurements.full_height} cm</p>
+                  <p className="font-medium">{order.order_measurements.full_height} in</p>
                 </div>
                 <div>
                   <p className="text-stone-600">Shoulder</p>
                   <p className="font-medium">
-                    {order.order_measurements.shoulder ? `${order.order_measurements.shoulder} cm` : "—"}
+                    {order.order_measurements.shoulder ? `${order.order_measurements.shoulder} in` : "—"}
                   </p>
                 </div>
               </div>

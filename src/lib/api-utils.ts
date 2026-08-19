@@ -65,6 +65,21 @@ function isSameOrigin(origin: string, host: string): boolean {
   }
 }
 
+/**
+ * Same-origin / CSRF guard for routes that hand-parse bodies and therefore
+ * cannot use validateRequest (multipart uploads, manual request.json()).
+ * Returns a 403 response when the Origin does not match the Host; returns null
+ * when the request is allowed (or carries no Origin header).
+ */
+export function checkSameOrigin(request: NextRequest): NextResponse | null {
+  const origin = request.headers.get("origin");
+  const host = request.headers.get("host");
+  if (origin && host && !isSameOrigin(origin, host)) {
+    return NextResponse.json({ success: false, error: "Invalid request origin" }, { status: 403 });
+  }
+  return null;
+}
+
 export async function validateRequest<T>(
   request: NextRequest,
   schema: { safeParse: (data: unknown) => { success: true; data: T } | { success: false; error: { issues: Array<{ message: string }> } } },

@@ -14,7 +14,8 @@ export type OrderEmailType =
   | "tracking_info"
   | "delivery_day"
   | "order_delivered"
-  | "order_cancelled";
+  | "order_cancelled"
+  | "order_refunded";
 
 type EmailTemplate = {
   subject: string;
@@ -72,6 +73,15 @@ const TEMPLATES: Record<OrderEmailType, EmailTemplate> = {
       <p>If you paid online, your refund (minus any applicable deductions) will be processed within 5-7 business days.</p>
       <p>We'd love to help if there's anything we can do — just reply to this email.</p>`,
   },
+  order_refunded: {
+    subject: "Your Aanchal order refund is on its way",
+    buildHtml: ({ customerName, orderId }) => `
+      <p>Hello ${customerName ?? "there"},</p>
+      <p>Your refund for Aanchal order <strong>#${orderId ?? ""}</strong> has been processed.</p>
+      <p>Depending on your bank, the amount should reflect in your account within 5-7 business days.</p>
+      <p>We're sorry for the inconvenience and hope to serve you again soon.</p>
+      <p>With love,<br/>Team Aanchal</p>`,
+  },
 };
 
 function brandHtml(title: string, innerHtml: string): string {
@@ -113,6 +123,7 @@ export async function sendOrderEmail(
     to: string;
     customerName?: string;
     orderId: string;
+    orderNumber?: string | null;
     trackingId?: string;
     trackingUrl?: string;
     shippingProvider?: string;
@@ -137,7 +148,7 @@ export async function sendOrderEmail(
   const template = TEMPLATES[params.type];
   const html = brandHtml(template.subject, template.buildHtml({
     customerName: params.customerName,
-    orderId: params.orderId.slice(0, 8).toUpperCase(),
+    orderId: params.orderNumber ?? params.orderId.slice(0, 8).toUpperCase(),
     trackingId: params.trackingId,
     trackingUrl: params.trackingUrl,
     shippingProvider: params.shippingProvider,

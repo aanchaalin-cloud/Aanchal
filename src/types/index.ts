@@ -81,6 +81,7 @@ export type Order = {
   estimated_delivery_date: string | null;
   packaging_status: PackagingStatus;
   shiprocket_shipment_id: string | null;
+  confirmation_method: ConfirmationMethod;
   created_at: string;
   updated_at: string;
 };
@@ -163,6 +164,9 @@ export type PaymentMethod = "prepaid" | "cod";
 export type PaymentProvider = "razorpay" | "paytm";
 
 export type PackagingStatus = "pending" | "packed" | "ready_for_pickup";
+
+/** How the order is confirmed: online payment gateway, or manual WhatsApp (Phase 1). */
+export type ConfirmationMethod = "payment" | "whatsapp";
 
 // ============================================================
 // COMPOSED / ENRICHED TYPES
@@ -272,6 +276,33 @@ export type PublicOrderStatus = {
   created_at: string;
   payment_provider: PaymentProvider | null;
   paytm_order_id: string | null;
+  confirmation_method: ConfirmationMethod;
+  // Extra fields returned for Phase 1 WhatsApp orders (awaiting manual confirmation).
+  subtotal?: number;
+  shipping_fee?: number;
+  discount_amount?: number;
+  payment_method?: PaymentMethod;
+  customer_name?: string;
+  customer_email?: string;
+  customer_phone?: string;
+  address_line1?: string;
+  address_line2?: string | null;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  notes?: string | null;
+  reward_voucher_code?: string | null;
+  influencer_code?: string | null;
+  order_items?: OrderItem[];
+  order_measurements?: OrderMeasurement | null;
+};
+
+// Response shape for the Phase 1 WhatsApp checkout flow.
+export type WhatsAppOrderResponse = {
+  orderId: string;          // Supabase order UUID
+  orderNumber: string | null;
+  confirmationMethod: "whatsapp";
+  statusToken: string;
 };
 
 // ============================================================

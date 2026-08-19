@@ -9,6 +9,7 @@ import type { ProductWithDetails } from "@/types";
 import { ProductDetail } from "@/components/product/ProductDetail";
 import { StorefrontErrorState } from "@/components/ui/StorefrontState";
 import { Messages } from "@/lib/messages";
+import { getPrimaryStorefrontImage } from "@/lib/product-images";
 
 type Props = {
   params: Promise<{ slug: string }>;
@@ -24,7 +25,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 
   const displayPrice = product.discount_price ?? product.price;
-  const ogImage = product.product_images?.[0]?.url;
+  const ogImage = getPrimaryStorefrontImage(product.product_images ?? []);
   const ogDescription = product.description
     ? `${product.description} — ₹${displayPrice.toLocaleString("en-IN")}`
     : `Shop ${product.name} at Aanchal — ₹${displayPrice.toLocaleString("en-IN")}`;
@@ -52,7 +53,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 function jsonLd(product: ProductWithDetails) {
   const siteUrl = process.env.NEXT_PUBLIC_BASE_URL ?? "https://aanchal.in";
   const displayPrice = product.discount_price ?? product.price;
-  const image = product.product_images?.[0]?.url;
+  const image = getPrimaryStorefrontImage(product.product_images ?? []);
   return {
     "@context": "https://schema.org",
     "@type": "Product",

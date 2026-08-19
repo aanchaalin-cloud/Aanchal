@@ -105,7 +105,7 @@ function AccountMenuItem({
 export function Header() {
   const { itemCount, openCart } = useCart();
   const { user, loading: authLoading, adminRole, signOut } = useAuth();
-  const { count: wishlistCount } = useWishlist();
+  const { count: wishlistCount, loading: wishlistLoading } = useWishlist();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
@@ -291,7 +291,7 @@ export function Header() {
                 aria-label="Wishlist"
               >
                 <Heart className="h-5 w-5" />
-                {user && wishlistCount > 0 && (
+                {user && !wishlistLoading && wishlistCount > 0 && (
                   <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#95271D] text-[10px] font-semibold text-white">
                     {wishlistCount > 9 ? "9+" : wishlistCount}
                   </span>
@@ -548,7 +548,7 @@ export function Header() {
               >
                 <Heart className="h-4.5 w-4.5 text-[#95271D]" />
                 Wishlist
-                {user && wishlistCount > 0 && (
+                {user && !wishlistLoading && wishlistCount > 0 && (
                   <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-[#95271D] px-1.5 text-[10px] font-semibold text-white">
                     {wishlistCount}
                   </span>

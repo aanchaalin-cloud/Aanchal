@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { X, ShoppingBag, Minus, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -19,17 +20,44 @@ export function CartDrawer() {
     displayTotal,
   } = useCart();
 
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Lock body scroll while the drawer is open (mirrors the mobile menu).
+  useEffect(() => {
+    if (isOpen) document.body.style.overflow = "hidden";
+    else document.body.style.overflow = "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isOpen]);
+
+  // Close on Escape and move focus into the drawer.
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeCart();
+    };
+    window.addEventListener("keydown", onKey);
+    closeButtonRef.current?.focus();
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isOpen, closeCart]);
+
   if (!isOpen || !isHydrated) return null;
 
   return (
     <>
       <div
-        className="fixed inset-0 z-50 bg-[#1C1C1C]/40 backdrop-blur-sm"
+        className="fixed inset-0 z-[60] bg-[#1C1C1C]/40 backdrop-blur-sm"
         onClick={closeCart}
         aria-hidden="true"
       />
 
-      <div className="fixed right-0 top-0 z-50 flex h-full w-full max-w-sm flex-col bg-[#FFF8F3] shadow-xl">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Shopping cart"
+        className="fixed right-0 top-0 z-[60] flex h-full w-full max-w-sm flex-col bg-[#FFF8F3] shadow-xl"
+      >
         <div className="flex items-center justify-between border-b border-[#E5D5C5]/50 px-5 py-4">
           <div className="flex items-center gap-2">
             <ShoppingBag className="h-5 w-5 text-[#1C1C1C]" />
@@ -38,6 +66,7 @@ export function CartDrawer() {
             </h2>
           </div>
           <button
+            ref={closeButtonRef}
             onClick={closeCart}
             className="flex h-10 w-10 items-center justify-center rounded text-[#6B6B6B] hover:bg-[#FFF0E8] hover:text-[#1C1C1C] transition-colors"
             aria-label="Close cart"
@@ -87,7 +116,7 @@ export function CartDrawer() {
                         <span>Size: {item.selected_size}</span>
                       )}
                       {item.selected_color && (
-                        <span>Colour: {item.selected_color}</span>
+                        <span>Variant: {item.selected_color}</span>
                       )}
                     </div>
                     <p className="text-sm font-semibold text-[#1C1C1C]">

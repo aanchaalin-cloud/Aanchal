@@ -77,8 +77,8 @@ export function Footer() {
                 </a>
               </li>
               <li>
-                <a href="tel:+918949911242" className="hover:text-white transition-colors">
-                  +91 89499 11242
+                <a href="tel:+917742719732" className="hover:text-white transition-colors">
+                  +91 77427 19732
                 </a>
               </li>
               <li>

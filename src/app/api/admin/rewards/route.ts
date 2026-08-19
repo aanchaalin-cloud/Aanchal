@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { Messages } from "@/lib/messages";
-import { requireAdmin } from "@/lib/api-utils";
+import { requireAdmin, checkSameOrigin } from "@/lib/api-utils";
 import { z } from "zod";
 import crypto from "crypto";
 
@@ -49,6 +49,8 @@ export async function GET(): Promise<NextResponse> {
 export async function PUT(request: NextRequest): Promise<NextResponse> {
   const auth = await requireAdmin();
   if (auth instanceof NextResponse) return auth;
+  const csrf = checkSameOrigin(request);
+  if (csrf) return csrf;
 
   let body: unknown;
   try {

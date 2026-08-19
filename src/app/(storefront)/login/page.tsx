@@ -111,10 +111,27 @@ function LoginForm() {
     }
 
     const supabase = createClient();
-    const { error: authError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const identifier = email.trim();
+    let authError: { message?: string } | null = null;
+
+    if (identifier.includes("@")) {
+      const res = await supabase.auth.signInWithPassword({
+        email: identifier,
+        password,
+      });
+      authError = res.error;
+    } else {
+      const res = await fetch("/api/auth/username-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier, password }),
+      });
+      const json = await res.json().catch(() => ({}));
+      authError =
+        !res.ok || !json.success
+          ? { message: json.error ?? "Invalid username or password." }
+          : null;
+    }
 
     if (authError) {
       const newCount = attemptData.count + 1;
@@ -127,15 +144,25 @@ function LoginForm() {
       setError(
         newCount >= MAX_ATTEMPTS
           ? "Too many failed attempts. Please wait 5 minutes."
-          : `Invalid email or password. ${MAX_ATTEMPTS - newCount} attempts remaining.`
+          : `Invalid email/username or password. ${MAX_ATTEMPTS - newCount} attempts remaining.`
       );
       setLoading(false);
       return;
     }
 
     localStorage.removeItem(RATE_LIMIT_KEY);
-    router.push(next);
-    router.refresh();
+
+    if (identifier.includes("@")) {
+      // Email path: signInWithPassword runs on the browser client, which fires
+      // onAuthStateChange, so AuthContext updates immediately.
+      router.push(next);
+      router.refresh();
+    } else {
+      // Username path: the session is set server-side via cookies; the browser
+      // Supabase client's onAuthStateChange never fires, leaving AuthContext
+      // (and therefore the wishlist) stale. A full reload re-reads the session.
+      window.location.href = next;
+    }
   };
 
   /* ── Google Sign-In ── */
@@ -411,17 +438,17 @@ function LoginForm() {
                     htmlFor="email"
                     className="mb-1.5 block text-sm font-medium text-[#1C1C1C]"
                   >
-                    Email address
+                    Email or username
                   </label>
                   <input
                     id="email"
-                    type="email"
+                    type="text"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
-                    autoComplete="email"
+                    autoComplete="username"
                     className="input-field"
-                    placeholder="you@email.com"
+                    placeholder="you@email.com or username"
                   />
                 </div>
 

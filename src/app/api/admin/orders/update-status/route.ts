@@ -6,6 +6,7 @@ import { z } from "zod";
 import { safeUrl } from "@/lib/validations";
 import { createInfluencerEarnings, cancelInfluencerEarnings } from "@/lib/orders/influencer-earnings";
 import { sendOrderEvent } from "@/lib/notifications/order-events";
+import { getShippingProvider } from "@/lib/shipping";
 
 const updateStatusSchema = z.object({
   orderId: z.string().uuid("Invalid order ID"),
@@ -31,7 +32,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const serviceClient = await createServiceClient();
   const { data: order } = await serviceClient
     .from("orders")
-    .select("id, order_status, customer_name, customer_email, customer_phone, payment_status")
+    .select("id, order_number, order_status, customer_name, customer_email, customer_phone, payment_status, shiprocket_shipment_id")
     .eq("id", data.orderId)
     .single();
 
@@ -112,9 +113,33 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
   }
 
+  // ── Best-effort: cancel the courier shipment when the order is cancelled ──
+  if (newStatus === "cancelled" && order.shiprocket_shipment_id) {
+    const provider = getShippingProvider();
+    if (provider?.cancelShipment) {
+      provider
+        .cancelShipment(order.shiprocket_shipment_id)
+        .then((res) => {
+          if (!res.success) {
+            console.warn(
+              "[update-order-status] Shiprocket cancel failed:",
+              res.error ?? "unknown"
+            );
+          }
+        })
+        .catch((err) => {
+          console.warn(
+            "[update-order-status] Shiprocket cancel error:",
+            err instanceof Error ? err.message : String(err)
+          );
+        });
+    }
+  }
+
   // ── Transactional notifications (idempotent) ──
   const eventPayload = {
     orderId: data.orderId,
+    orderNumber: order.order_number,
     customerEmail: order.customer_email,
     customerName: order.customer_name,
   };
@@ -133,6 +158,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     await sendOrderEvent({ type: "order_delivered", ...eventPayload });
   } else if (newStatus === "cancelled") {
     await sendOrderEvent({ type: "order_cancelled", ...eventPayload });
+  } else if (newStatus === "refunded") {
+    await sendOrderEvent({ type: "order_refunded", ...eventPayload });
   }
 
   return NextResponse.json({

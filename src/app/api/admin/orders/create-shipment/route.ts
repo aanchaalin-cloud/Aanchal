@@ -37,13 +37,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const { data: order } = await supabase
     .from("orders")
     .select(
-      "id, order_number, order_status, customer_name, customer_email, customer_phone, address_line1, address_line2, city, state, pincode, total_amount, cod_amount, shiprocket_shipment_id, tracking_id, order_items(product_name, quantity)"
+      "id, order_number, order_status, payment_status, customer_name, customer_email, customer_phone, address_line1, address_line2, city, state, pincode, total_amount, cod_amount, shiprocket_shipment_id, tracking_id, order_items(product_name, quantity)"
     )
     .eq("id", data.orderId)
     .single();
 
   if (!order) {
     return NextResponse.json({ success: false, error: Messages.adminOrderNotFound }, { status: 404 });
+  }
+
+  // Do not hand unpaid / abandoned orders to the courier.
+  if (!["paid", "partially_paid"].includes(order.payment_status)) {
+    return NextResponse.json(
+      { success: false, error: "This order's payment is not confirmed. Confirm payment before shipping." },
+      { status: 400 }
+    );
   }
 
   // Idempotency — an existing shipment (AWB or Shiprocket id) blocks duplicates.
@@ -85,7 +93,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       shipped_at: new Date().toISOString(),
     };
     if (shipment.trackingUrl) updatePayload.tracking_url = shipment.trackingUrl;
-    if (shipment.awbNumber) updatePayload.shiprocket_shipment_id = shipment.awbNumber;
+    // shiprocket_shipment_id stores the provider's numeric shipment ID (needed
+    // for cancel / label); tracking_id holds the AWB used for tracking.
+    if (shipment.providerShipmentId) updatePayload.shiprocket_shipment_id = shipment.providerShipmentId;
 
     const { error: updateError } = await supabase
       .from("orders")
@@ -109,6 +119,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     await sendOrderEvent({
       type: "order_shipped",
       orderId: order.id,
+      orderNumber: order.order_number,
       customerEmail: order.customer_email,
       customerName: order.customer_name,
       trackingId: shipment.trackingId,

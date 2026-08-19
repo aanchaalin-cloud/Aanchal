@@ -42,7 +42,12 @@ export default async function AccountPage() {
       <AccountView
         profile={
           profile
-            ? { full_name: profile.full_name, email: profile.email, phone: profile.phone }
+            ? {
+                full_name: profile.full_name,
+                email: profile.email,
+                phone: profile.phone,
+                username: profile.username,
+              }
             : null
         }
         orders={orders}

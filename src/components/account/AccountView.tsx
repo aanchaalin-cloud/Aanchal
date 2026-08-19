@@ -31,11 +31,13 @@ import { formatPrice, getOrderStatusLabel, formatDate } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 import { StorefrontEmptyState } from "@/components/ui/StorefrontState";
 import { createClient } from "@/lib/supabase/client";
+import { getPrimaryStorefrontImage } from "@/lib/product-images";
 
 type ProfileData = {
   full_name: string;
   email: string;
   phone: string | null;
+  username: string | null;
 };
 
 type Props = {
@@ -82,13 +84,14 @@ export default function AccountView({
     requestedTab === "wishlist" ||
       requestedTab === "addresses" ||
       requestedTab === "influencer" ||
-      requestedTab === "profile"
+      requestedTab === "orders"
       ? requestedTab
-      : "orders"
+      : "profile"
   );
 
   // Profile edit
   const [name, setName] = useState(profile?.full_name ?? "");
+  const [username, setUsername] = useState(profile?.username ?? "");
   const [phone, setPhone] = useState(profile?.phone ?? "");
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileMsg, setProfileMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -130,7 +133,7 @@ export default function AccountView({
       const res = await fetch("/api/account/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ full_name: name, phone }),
+        body: JSON.stringify({ full_name: name, phone, username: username || undefined }),
       });
       const data = await res.json();
       if (data.success) {
@@ -393,7 +396,7 @@ export default function AccountView({
                     >
                       <div className="relative aspect-[3/4] overflow-hidden bg-[#FFF0E8]">
                         <Image
-                          src={product.product_images?.[0]?.url ?? "/images/product-placeholder.svg"}
+                          src={getPrimaryStorefrontImage(product.product_images ?? []) ?? "/images/product-placeholder.svg"}
                           alt={product.name}
                           fill
                           sizes="(max-width: 640px) 50vw, 25vw"
@@ -765,6 +768,17 @@ export default function AccountView({
                       className="input-field"
                       placeholder="10-digit mobile number"
                     />
+                  </Field>
+                  <Field label="Username">
+                    <input
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      className="input-field"
+                      placeholder="e.g. priya_sharma"
+                    />
+                    <p className="mt-1 text-xs text-[#6B6B6B]">
+                      3-20 characters: lowercase letters, numbers, underscores. Used to sign in.
+                    </p>
                   </Field>
                   {profileMsg && (
                     <p className={`text-sm ${profileMsg.ok ? "text-green-700" : "text-[#C41E3A]"}`}>

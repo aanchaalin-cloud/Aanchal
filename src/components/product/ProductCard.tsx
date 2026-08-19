@@ -7,6 +7,7 @@ import type { ProductWithDetails } from "@/types";
 import { useCart } from "@/context/CartContext";
 import { WishlistButton } from "@/components/product/WishlistButton";
 import { formatPrice } from "@/lib/utils";
+import { getPrimaryStorefrontImage } from "@/lib/product-images";
 
 interface ProductCardProps {
   product: ProductWithDetails;
@@ -15,8 +16,8 @@ interface ProductCardProps {
 export function ProductCard({ product }: ProductCardProps) {
   const { addItem, openCart } = useCart();
 
-  const firstImage = product.product_images?.[0]?.url || "/images/product-placeholder.svg";
-  const hoverImage = product.product_images?.[1]?.url;
+  const firstImage =
+    getPrimaryStorefrontImage(product.product_images ?? []) || "/images/product-placeholder.svg";
   const category = product.category;
   const activeVariants = product.product_variants?.filter((v) => v.is_active) ?? [];
   const currentPrice = product.discount_price || product.price;
@@ -56,15 +57,6 @@ export function ProductCard({ product }: ProductCardProps) {
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
           className="object-cover pointer-fine:group-hover:scale-105 transition-transform duration-700"
         />
-        {hoverImage && (
-          <Image
-            src={hoverImage}
-            alt={`${product.name} alternate view`}
-            fill
-            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-            className="object-cover opacity-0 transition-opacity duration-500 pointer-fine:group-hover:opacity-100 pointer-fine:group-hover:scale-105"
-          />
-        )}
         {!inStock && (
           <div className="absolute inset-0 flex items-center justify-center bg-[#1C1C1C]/40">
             <span className="text-sm font-semibold uppercase tracking-wider text-white">

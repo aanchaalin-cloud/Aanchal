@@ -8,7 +8,7 @@ import { getSectionContent, type HomepageSectionContent } from "@/lib/homepage-s
 
 export function HeroSection({ content }: { content?: HomepageSectionContent }) {
   const c = getSectionContent("hero", content);
-  const videoUrl = c.videoUrl || "/Video1.mp4";
+  const videoUrl = c.videoUrl || "/video1.mp4";
   const videoRef = useRef<HTMLVideoElement>(null);
   const sectionRef = useRef<HTMLElement>(null);
   const [showReplay, setShowReplay] = useState(false);
@@ -95,7 +95,7 @@ export function HeroSection({ content }: { content?: HomepageSectionContent }) {
               </div>
             </div>
             <p className="mt-4 text-xl text-white/90 font-light tracking-wide sm:text-2xl">
-              {c.headline || "Premium Exotic Anarkali"}
+              {c.headline || "Premium Anarkali"}
             </p>
             <p className="mt-3 text-base font-medium text-[#D4A843] sm:text-lg">
               {c.subheadline || "Custom Tailored for You"}

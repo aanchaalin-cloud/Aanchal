@@ -39,8 +39,11 @@ export default function PaymentStatusRefresher({
         body: JSON.stringify({ provider: "paytm", orderId, paytmOrderId }),      });
       const data = await res.json().catch(() => null);
 
-      // Order settled — stop and re-render the server component.
-      if (res.ok || data?.code === "PAYMENT_FAILED") {
+      // Order settled (HTTP 200, success:true) or definitively failed — stop
+      // and re-render the server component. NOTE: verify-payment returns HTTP
+      // 202 with code "PENDING" while Paytm is still settling; res.ok is true
+      // for 202, so we must NOT treat a bare res.ok as settled.
+      if (data?.success === true || data?.code === "PAYMENT_FAILED") {
         setStopped(true);
         router.refresh();
         return;

@@ -44,9 +44,10 @@ export default function ShippingPolicyPage() {
       <PolicyCard icon={<IndianRupee className="h-4.5 w-4.5" />} title="Shipping Charges">
         <PolicyList
           items={[
-            <span key="flat">
-              A flat shipping fee of <strong className="font-semibold text-[#1C1C1C]">₹99</strong> applies to all orders across India
+            <span key="free">
+              Shipping is <strong className="font-semibold text-[#1C1C1C]">free</strong> on all orders across India, with no minimum order value.
             </span>,
+            <span key="custom">Custom-tailored pieces may be dispatched separately at no extra cost.</span>,
           ]}
         />
       </PolicyCard>

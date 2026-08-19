@@ -76,6 +76,13 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ productId }),
       });
+
+      // Session is stale/dead server-side even though the client thinks the
+      // user is signed in — send them back through login.
+      if (res.status === 401) {
+        return { ok: false, requiresLogin: true };
+      }
+
       const data = await res.json();
 
       if (data.success) {

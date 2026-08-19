@@ -8,6 +8,12 @@ const applySchema = z.object({
   platform: z.string().min(1, "Platform is required").max(50),
   followers: z.string().max(50).optional().or(z.literal("")),
   bio: z.string().min(20, "Tell us a little more about yourself (min 20 characters)").max(1000),
+  niche: z.string().max(100).optional().or(z.literal("")),
+  desired_promo_code: z
+    .string()
+    .max(50)
+    .optional()
+    .or(z.literal("")),
 });
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -65,6 +71,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       platform: body.platform,
       followers: body.followers || null,
       bio: body.bio,
+      niche: body.niche || null,
+      desired_promo_code: body.desired_promo_code || null,
       notes: null,
     },
     { onConflict: "id" }

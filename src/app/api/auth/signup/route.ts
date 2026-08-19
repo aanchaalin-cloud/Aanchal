@@ -12,6 +12,14 @@ const signupSchema = z.object({
     .optional()
     .or(z.literal("")),
   password: z.string().min(8, "Password must be at least 8 characters").max(100),
+  username: z
+    .string()
+    .regex(
+      /^[a-z0-9_]{3,20}$/,
+      "Username must be 3-20 characters: lowercase letters, numbers, underscores"
+    )
+    .optional()
+    .or(z.literal("")),
 });
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -35,11 +43,32 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
+  const username = data.username ? data.username.toLowerCase() : null;
+
+  if (username) {
+    const { data: usernameTaken } = await supabase
+      .from("customers")
+      .select("id")
+      .eq("username", username)
+      .maybeSingle();
+
+    if (usernameTaken) {
+      return NextResponse.json(
+        { success: false, error: "This username is already taken." },
+        { status: 409 },
+      );
+    }
+  }
+
   const { data: authUser, error: createError } = await supabase.auth.admin.createUser({
     email: data.email.toLowerCase(),
     password: data.password,
     email_confirm: true,
-    user_metadata: { full_name: data.full_name, phone: data.phone || null },
+    user_metadata: {
+      full_name: data.full_name,
+      phone: data.phone || null,
+      ...(username ? { username } : {}),
+    },
   });
 
   if (createError || !authUser.user) {
@@ -55,6 +84,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     full_name: data.full_name,
     email: data.email.toLowerCase(),
     phone: data.phone || null,
+    username,
   });
 
   if (profileError) {

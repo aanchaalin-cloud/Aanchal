@@ -63,8 +63,13 @@ export async function GET(): Promise<NextResponse> {
     return NextResponse.json({ success: false, error: "Failed to load history" }, { status: 500 });
   }
 
+  // `products` is embedded through a many-to-one FK (product_history.product_id
+  // → products.id); PostgREST may return it as an object or one-element array.
   const products = (data ?? [])
-    .map((row: { products: ProductWithDetails[] }) => row.products?.[0])
+    .map((row: { products?: ProductWithDetails | ProductWithDetails[] }) => {
+      const p = row.products;
+      return Array.isArray(p) ? p[0] : p;
+    })
     .filter((p: ProductWithDetails | undefined): p is ProductWithDetails => Boolean(p));
 
   return NextResponse.json({ success: true, data: products });

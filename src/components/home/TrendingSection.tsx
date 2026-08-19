@@ -3,10 +3,11 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { getFeaturedProducts } from "@/lib/queries/products";
 import type { ProductWithDetails } from "@/types";
+import { getPrimaryStorefrontImage } from "@/lib/product-images";
 
 function TrendingCard({ product }: { product: ProductWithDetails }) {
-  const firstImage = product.product_images?.[0]?.url || "/images/product-placeholder.svg";
-  const hoverImage = product.product_images?.[1]?.url;
+  // Static card — show only the product's first image (no hover swap).
+  const firstImage = getPrimaryStorefrontImage(product.product_images ?? []) || "/images/product-placeholder.svg";
   const currentPrice = product.discount_price || product.price;
 
   const card = (
@@ -17,17 +18,8 @@ function TrendingCard({ product }: { product: ProductWithDetails }) {
           alt={product.name}
           fill
           className="object-cover group-hover:scale-105 transition-transform duration-700"
-          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+          sizes="(max-width: 640px) 220px, (max-width: 1024px) 260px, 300px"
         />
-        {hoverImage && (
-          <Image
-            src={hoverImage}
-            alt={`${product.name} current view`}
-            fill
-            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
-            className="object-cover opacity-0 transition-opacity duration-500 group-hover:opacity-100 group-hover:scale-105"
-          />
-        )}
       </div>
       <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-4 pt-12">
         <h3 className="text-sm font-medium text-white leading-snug">
@@ -43,7 +35,7 @@ function TrendingCard({ product }: { product: ProductWithDetails }) {
   return (
     <Link
       href={`/products/${product.slug}`}
-      className="group block"
+      className="group block w-[220px] shrink-0 sm:w-[260px] lg:w-[300px]"
       aria-label={`View ${product.name}`}
     >
       {card}
@@ -77,10 +69,16 @@ export async function TrendingSection() {
           </Link>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 max-[360px]:grid-cols-1">
-          {featured.map((product) => (
-            <TrendingCard key={product.id} product={product} />
-          ))}
+        <div className="overflow-hidden" aria-label="Trending products">
+          <div className="marquee-track flex w-max">
+            {[0, 1].map((dup) => (
+              <div key={dup} className="flex gap-4 pr-4" aria-hidden={dup === 1}>
+                {featured.map((product) => (
+                  <TrendingCard key={product.id} product={product} />
+                ))}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </section>

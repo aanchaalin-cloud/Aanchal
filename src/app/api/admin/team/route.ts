@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { requireSuperAdmin } from "@/lib/api-utils";
-import { validateRequest } from "@/lib/api-utils";
+import { requireSuperAdmin, validateRequest, checkSameOrigin } from "@/lib/api-utils";
 import { z } from "zod";
 
 const addSchema = z.object({
@@ -74,6 +73,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 export async function DELETE(request: NextRequest): Promise<NextResponse> {
   const auth = await requireSuperAdmin();
   if (auth instanceof NextResponse) return auth;
+  const csrf = checkSameOrigin(request);
+  if (csrf) return csrf;
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

@@ -7,6 +7,29 @@ const wishlistSchema = z.object({
   productId: z.string().uuid("Invalid product ID"),
 });
 
+/**
+ * Users signed in via OAuth/magic-link have no `customers` row (it is created
+ * synchronously only by the signup/profile/influencer routes). wishlist_items
+ * has a FK on customers.id, so those users' POST/DELETE would 500. Ensure the
+ * row exists first (self-insert RLS allows id = auth.uid()).
+ */
+async function ensureCustomer(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  user: { id: string; email?: string | null; user_metadata?: Record<string, unknown> | null }
+): Promise<void> {
+  const fullName =
+    typeof user.user_metadata?.full_name === "string" ? user.user_metadata.full_name : "";
+  const { error } = await supabase
+    .from("customers")
+    .upsert(
+      { id: user.id, email: (user.email ?? "").toLowerCase(), full_name: fullName },
+      { onConflict: "id", ignoreDuplicates: true }
+    );
+  if (error) {
+    console.warn("[wishlist] ensureCustomer failed:", error.message);
+  }
+}
+
 export async function GET(): Promise<NextResponse> {
   const supabase = await createClient();
   const {
@@ -48,6 +71,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ success: false, error: "Please sign in to save items to your wishlist" }, { status: 401 });
   }
 
+  await ensureCustomer(supabase, user);
+
   const { error } = await supabase
     .from("wishlist_items")
     .upsert(
@@ -74,6 +99,8 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
   if (!user) {
     return NextResponse.json({ success: false, error: "Authentication required" }, { status: 401 });
   }
+
+  await ensureCustomer(supabase, user);
 
   const { error } = await supabase
     .from("wishlist_items")

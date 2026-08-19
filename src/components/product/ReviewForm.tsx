@@ -142,13 +142,12 @@ export function ReviewForm({ productId, onSubmitted }: ReviewFormProps) {
           />
         </div>
         <div>
-          <label htmlFor="review-email" className="block text-xs font-medium text-[#1C1C1C] mb-1">Email *</label>
+          <label htmlFor="review-email" className="block text-xs font-medium text-[#1C1C1C] mb-1">Email (optional)</label>
           <input
             id="review-email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            required
             className="w-full rounded border border-[#E5D5C5] bg-white px-3 py-2 text-sm text-[#1C1C1C] focus:outline-none focus:ring-2 focus:ring-[#95271D]"
             placeholder="your@email.com"
           />

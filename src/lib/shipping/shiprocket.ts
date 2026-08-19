@@ -14,6 +14,9 @@ import {
   type ShippingProvider,
   type ShipmentCreateRequest,
   type ShipmentCreateResponse,
+  type ShipmentTrackingInfo,
+  type ShipmentTrackEvent,
+  type ShipmentCancelResult,
 } from "@/lib/shipping";
 
 const DEFAULT_BASE_URL = "https://apiv2.shiprocket.in";
@@ -21,7 +24,43 @@ const DEFAULT_BASE_URL = "https://apiv2.shiprocket.in";
 type CachedToken = { token: string; expiresAt: number };
 
 let tokenCache: CachedToken | null = null;
-const TOKEN_TTL_MS = 23 * 60 * 60 * 1000; // tokens are valid ~24h
+// Tokens are valid for ~10 days (240 hours); cache for 9 days to avoid
+// needless re-authentication while staying safely inside the window.
+const TOKEN_TTL_MS = 9 * 24 * 60 * 60 * 1000;
+
+/**
+ * Map a Shiprocket tracking status to the store's customer-facing order
+ * lifecycle: PLACED → CONFIRMED → PROCESSING → SHIPPED → OUT FOR DELIVERY →
+ * DELIVERED. Returns null when the status is unknown/not mappable so callers
+ * can leave the order untouched.
+ */
+export function mapShiprocketStatus(status: string): string | null {
+  const s = (status ?? "").toLowerCase();
+  if (!s) return null;
+
+  if (s.includes("delivered")) return "delivered";
+  if (s.includes("out for delivery") || s.includes("out_for_delivery")) return "out_for_delivery";
+  if (
+    s.includes("in transit") ||
+    s.includes("in_transit") ||
+    s.includes("shipped") ||
+    s.includes("dispatch")
+  ) {
+    return "shipped";
+  }
+  if (
+    s.includes("pickup") ||
+    s.includes("manifested") ||
+    s.includes("processing") ||
+    s.includes("created") ||
+    s.includes("booked")
+  ) {
+    return "ready_to_ship";
+  }
+  if (s.includes("cancel")) return "cancelled";
+  // RTO / undelivered / NDR — do not auto-transition to a paid state.
+  return null;
+}
 
 function getConfig(): { baseUrl: string; email: string; password: string } | null {
   const email = process.env.SHIPROCKET_EMAIL;
@@ -172,7 +211,105 @@ export class ShiprocketProvider implements ShippingProvider {
       trackingUrl: awbCode ? `https://shiprocket.co/tracking/awb/${awbCode}` : undefined,
       provider: "shiprocket",
       awbNumber: awbCode ?? undefined,
+      providerShipmentId: shipmentId,
       labelUrl: undefined,
     };
+  }
+
+  async trackShipment(awbCode: string): Promise<ShipmentTrackingInfo | null> {
+    const config = getConfig();
+    if (!config) throw new Error("Shiprocket is not configured");
+
+    const token = await getToken(config);
+    if (!token) throw new Error("Shiprocket authentication failed");
+
+    const { ok, data } = await fetchJson<{
+      tracking_data?: { tracking_status?: string; created_at?: string };
+      shipment_track?: Array<{
+        status?: string;
+        current_status?: string;
+        location?: string;
+        datetime?: string;
+      }>;
+      etd?: string;
+      awb_code?: string;
+      shipment_id?: string;
+      message?: string;
+    }>(
+      config.baseUrl,
+      `/v1/external/courier/track/awb/${encodeURIComponent(awbCode)}`,
+      { method: "GET" },
+      token
+    );
+
+    if (!ok || !data.tracking_data) {
+      console.error("[shiprocket] track failed:", data.message ?? "no tracking data");
+      return null;
+    }
+
+    const events: ShipmentTrackEvent[] = (data.shipment_track ?? []).map((e) => ({
+      status: e.status ?? "",
+      currentStatus: e.current_status ?? "",
+      location: e.location ?? null,
+      datetime: e.datetime ?? null,
+    }));
+
+    return {
+      awbCode: data.awb_code ?? awbCode,
+      shipmentId: data.shipment_id ?? null,
+      trackingStatus: data.tracking_data.tracking_status ?? null,
+      etd: data.etd ?? null,
+      events,
+      mappedOrderStatus: mapShiprocketStatus(data.tracking_data.tracking_status ?? ""),
+    };
+  }
+
+  async cancelShipment(shipmentId: string): Promise<ShipmentCancelResult> {
+    const config = getConfig();
+    if (!config) throw new Error("Shiprocket is not configured");
+
+    const token = await getToken(config);
+    if (!token) throw new Error("Shiprocket authentication failed");
+
+    const { ok, status } = await fetchJson<{ message?: string }>(
+      config.baseUrl,
+      "/v1/external/orders/cancel",
+      {
+        method: "POST",
+        body: JSON.stringify({ ids: [Number(shipmentId)] }),
+      },
+      token
+    );
+
+    // Cancel returns 204 No Content on success.
+    if (ok) return { success: true };
+    return { success: false, error: `Shiprocket cancel failed (${status})` };
+  }
+
+  async generateLabel(shipmentId: string): Promise<string | null> {
+    const config = getConfig();
+    if (!config) throw new Error("Shiprocket is not configured");
+
+    const token = await getToken(config);
+    if (!token) throw new Error("Shiprocket authentication failed");
+
+    const { ok, data } = await fetchJson<{
+      label_url?: string;
+      message?: string;
+    }>(
+      config.baseUrl,
+      "/v1/external/courier/generate/label",
+      {
+        method: "POST",
+        body: JSON.stringify({ shipment_id: [shipmentId] }),
+      },
+      token
+    );
+
+    if (!ok || !data.label_url) {
+      console.error("[shiprocket] label failed:", data.message ?? "no label_url");
+      return null;
+    }
+    return data.label_url;
   }
 }

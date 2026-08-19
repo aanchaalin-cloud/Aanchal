@@ -18,27 +18,28 @@ export const safeUrl = z
 
 // ============================================================
 // MEASUREMENT SCHEMA
-// Validates custom fit measurements in centimetres (cm).
-// Sensible range: chest 50-150cm, waist 40-130cm, height 100-220cm
+// Custom fit measurements in inches. Kept intentionally flexible for
+// a clothing brand — values up to 300 inches per body part and a
+// maximum height of 10 feet (120 inches) are accepted.
 // ============================================================
 export const measurementSchema = z.object({
   chest: z
     .number()
-    .min(50, "Chest must be at least 50 cm")
-    .max(150, "Chest must be at most 150 cm"),
+    .min(1, "Chest must be greater than 0 inches")
+    .max(300, "Chest must be at most 300 inches"),
   waist: z
     .number()
-    .min(40, "Waist must be at least 40 cm")
-    .max(130, "Waist must be at most 130 cm"),
+    .min(1, "Waist must be greater than 0 inches")
+    .max(300, "Waist must be at most 300 inches"),
   full_height: z
     .number()
-    .min(100, "Height must be at least 100 cm")
-    .max(220, "Height must be at most 220 cm"),
+    .min(1, "Height is required")
+    .max(120, "Height must be at most 10 feet (120 inches)"),
   shoulder: z
     .number()
-    .min(25, "Shoulder must be at least 25 cm")
-    .max(70, "Shoulder must be at most 70 cm"),
-  unit: z.literal("cm"),
+    .min(1, "Shoulder must be greater than 0 inches")
+    .max(300, "Shoulder must be at most 300 inches"),
+  unit: z.literal("inches"),
   personalisation_request: z
     .string()
     .max(1000, "Personalisation request is too long")
@@ -93,7 +94,9 @@ export const reviewSchema = z.object({
   customer_email: z
     .string()
     .email("Invalid email address")
-    .max(200),
+    .max(200)
+    .optional()
+    .or(z.literal("")),
   rating: z
     .number()
     .int("Rating must be a whole number")
@@ -143,8 +146,10 @@ export const checkoutSchema = z.object({
   notes: z.string().max(500, "Notes are too long").optional(),
   // Custom fit measurements — required
   measurements: measurementSchema,
-  // Payment method
-  payment_method: z.enum(["prepaid", "cod"]),
+  // Payment method — required for online checkout; omitted in the Phase 1
+  // WhatsApp confirmation flow (no online payment happens then). The server
+  // defaults to 'prepaid' when it is not supplied.
+  payment_method: z.enum(["prepaid", "cod"]).optional(),
   // Coupon code (optional)
   coupon_code: z.string().max(50).optional(),
   // Influencer referral code (optional)
@@ -170,12 +175,13 @@ export const checkoutSchema = z.object({
     .min(1, "Cart cannot be empty")
     .max(20, "Too many items in cart"),
   // Client-generated key so a double-submit returns the same order instead of
-  // creating a duplicate.
+  // creating a duplicate. Sent as the raw composite string; the server
+  // normalizes it to a fixed-length hash before storing/looking it up.
   idempotency_key: z
     .string()
     .min(8, "Invalid idempotency key")
-    .max(100)
-    .regex(/^[A-Za-z0-9_-]+$/, "Invalid idempotency key")
+    .max(500, "Invalid idempotency key")
+    .regex(/^\S+$/, "Invalid idempotency key")
     .optional(),
 });
 

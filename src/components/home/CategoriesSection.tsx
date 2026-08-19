@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { getActiveProductCatalog } from "@/lib/queries/products";
 import type { ProductWithDetails } from "@/types";
+import { getPrimarySlideshowImage } from "@/lib/product-images";
 
 type CollectionItem = {
   name: string;
@@ -20,8 +21,7 @@ const TOP_COLLECTIONS: CollectionItem[] = [
 ];
 
 function collectionImage(product: ProductWithDetails): string {
-  const images = product.product_images ?? [];
-  return images[2]?.url || images[0]?.url || "/images/product-placeholder.svg";
+  return getPrimarySlideshowImage(product.product_images ?? []) ?? "/images/product-placeholder.svg";
 }
 
 function CollectionCard({

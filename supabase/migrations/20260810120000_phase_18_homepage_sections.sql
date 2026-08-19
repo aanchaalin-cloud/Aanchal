@@ -50,12 +50,12 @@ select * from (values
     20,
     '{
       "eyebrow":"Premium Indian Ethnic Wear",
-      "headline":"Premium Exotic Anarkali",
+      "headline":"Premium Anarkali",
       "subheadline":"Custom Tailored for You",
       "description":"Order Today — handcrafted ethnic wear made to your measurements.",
       "ctaLabel":"Shop Now",
       "ctaHref":"/shop",
-      "videoUrl":"/Video1.mp4"
+      "videoUrl":"/video1.mp4"
     }'::jsonb
   ),
   (

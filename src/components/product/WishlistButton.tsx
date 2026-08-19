@@ -17,15 +17,16 @@ export function WishlistButton({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { isWishlisted, toggleWishlist } = useWishlist();
+  const { isWishlisted, toggleWishlist, loading } = useWishlist();
   const [busy, setBusy] = useState(false);
 
   const active = isWishlisted(productId);
+  const pendingState = loading || busy;
 
   const handleClick = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (busy) return;
+    if (pendingState) return;
     setBusy(true);
 
     const result = await toggleWishlist(productId);
@@ -41,12 +42,14 @@ export function WishlistButton({
     <button
       type="button"
       onClick={handleClick}
-      aria-label={active ? "Remove from wishlist" : "Add to wishlist"}
+      disabled={pendingState}
+      aria-label={active ? "Remove from wishlist" : loading ? "Loading wishlist" : "Add to wishlist"}
       aria-pressed={active}
       className={cn(
         "flex items-center justify-center rounded-full bg-white/95 shadow-sm border transition-all hover:scale-105",
         box,
         active ? "text-[#C41E3A] border-[#C41E3A]/30" : "text-[#6B6B6B] border-[#E5D5C5]",
+        pendingState && "opacity-60",
         className
       )}
     >

@@ -7,6 +7,7 @@ export type CustomerProfile = {
   full_name: string;
   email: string;
   phone: string | null;
+  username: string | null;
   created_at: string;
 };
 
@@ -55,7 +56,7 @@ export async function getCustomerProfile(userId: string): Promise<CustomerProfil
 
   const { data } = await supabase
     .from("customers")
-    .select("id, full_name, email, phone, created_at")
+    .select("id, full_name, email, phone, username, created_at")
     .eq("id", userId)
     .single();
 
@@ -167,8 +168,14 @@ export async function getWishlistProducts(userId: string): Promise<ProductWithDe
     return [];
   }
 
+  // `products` is embedded through a many-to-one FK (wishlist_items.product_id
+  // → products.id), which PostgREST may return as a single object or a
+  // one-element array depending on the resolved relationship. Handle both.
   const products = (data ?? [])
-    .map((row: { products: ProductWithDetails[] }) => row.products?.[0])
+    .map((row: { products?: ProductWithDetails | ProductWithDetails[] }) => {
+      const p = row.products;
+      return Array.isArray(p) ? p[0] : p;
+    })
     .filter((p: ProductWithDetails | undefined): p is ProductWithDetails => Boolean(p));
 
   return products ?? [];

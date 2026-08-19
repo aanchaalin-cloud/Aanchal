@@ -40,6 +40,13 @@ type HistoryEntry = {
   created_at: string;
 };
 
+type TrackingEvent = {
+  status: string;
+  currentStatus: string;
+  location: string | null;
+  datetime: string | null;
+};
+
 type OrderData = {
   id: string;
   order_number: string | null;
@@ -65,6 +72,7 @@ type OrderData = {
   tracking_id: string | null;
   tracking_url: string | null;
   shipping_provider: string | null;
+  tracking_events?: TrackingEvent[];
   order_items: OrderItem[];
   order_status_history: HistoryEntry[];
 };
@@ -320,6 +328,33 @@ function TrackOrderContent() {
                     </a>
                   )}
                 </div>
+              </div>
+            )}
+
+            {/* Live courier events */}
+            {order.tracking_events && order.tracking_events.length > 0 && (
+              <div className="mt-4 rounded-sm border border-[#E5D5C5]/60 bg-white p-4">
+                <h3 className="text-xs font-semibold uppercase tracking-widest text-[#1C1C1C]">
+                  Courier Updates
+                </h3>
+                <ol className="mt-3 space-y-3">
+                  {order.tracking_events
+                    .slice()
+                    .reverse()
+                    .map((event, idx) => (
+                      <li key={idx} className="flex gap-3">
+                        <span className="mt-1 flex h-2 w-2 shrink-0 rounded-full bg-[#95271D]" />
+                        <div className="text-sm">
+                          <p className="font-medium text-[#1C1C1C]">
+                            {event.currentStatus || event.status || "Update"}
+                          </p>
+                          <p className="text-xs text-[#6B6B6B]">
+                            {[event.location, event.datetime].filter(Boolean).join(" · ")}
+                          </p>
+                        </div>
+                      </li>
+                    ))}
+                </ol>
               </div>
             )}
 

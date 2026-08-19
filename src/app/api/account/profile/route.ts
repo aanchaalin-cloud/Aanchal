@@ -10,6 +10,14 @@ const updateSchema = z.object({
     .regex(/^[6-9]\d{9}$/, "Enter a valid 10-digit Indian mobile number")
     .optional()
     .or(z.literal("")),
+  username: z
+    .string()
+    .regex(
+      /^[a-z0-9_]{3,20}$/,
+      "Username must be 3-20 characters: lowercase letters, numbers, underscores"
+    )
+    .optional()
+    .or(z.literal("")),
 });
 
 export async function GET(): Promise<NextResponse> {
@@ -19,7 +27,7 @@ export async function GET(): Promise<NextResponse> {
 
   const { data } = await supabase
     .from("customers")
-    .select("id, full_name, email, phone, created_at")
+    .select("id, full_name, email, phone, username, created_at")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -36,6 +44,23 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
 
   const service = await createServiceClient();
 
+  const username = data.username ? data.username.toLowerCase() : null;
+
+  if (username) {
+    const { data: taken } = await service
+      .from("customers")
+      .select("id")
+      .neq("id", user.id)
+      .eq("username", username)
+      .maybeSingle();
+    if (taken) {
+      return NextResponse.json(
+        { success: false, error: "This username is already taken." },
+        { status: 409 },
+      );
+    }
+  }
+
   const { data: existing } = await service
     .from("customers")
     .select("id")
@@ -47,6 +72,7 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
     full_name: data.full_name.trim(),
     email: (user.email ?? "").toLowerCase(),
     phone: data.phone ? data.phone.trim() : null,
+    username,
   };
 
   const { error } = existing

@@ -54,8 +54,8 @@ export default function MeasurementForm({
       </div>
 
       <p className="text-xs text-[#6B6B6B] leading-relaxed">
-        All measurements are in centimetres (cm). These are used solely to craft
-        your custom-fit outfit.
+        All measurements are in inches. These are used solely to craft your
+        custom-fit outfit.
       </p>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -65,13 +65,13 @@ export default function MeasurementForm({
             htmlFor="measurement-chest"
             className="block text-xs font-medium text-[#1C1C1C] mb-1"
           >
-            Chest (cm) *
+            Chest (inches) *
           </label>
           <input
             id="measurement-chest"
             type="number"
-            min={50}
-            max={150}
+            min={1}
+            max={300}
             step={0.1}
             value={value.chest || ""}
             onChange={(e) => update("chest", parseFloat(e.target.value) || 0)}
@@ -80,7 +80,7 @@ export default function MeasurementForm({
             className={`w-full rounded border bg-white px-3 py-2 text-sm text-[#1C1C1C] placeholder:text-[#6B6B6B]/80 focus:outline-none focus:ring-2 focus:ring-[#800020] ${
               errors?.chest ? "border-[#C41E3A]" : "border-[#E5D5C5]"
             }`}
-            placeholder="e.g. 92.5"
+            placeholder="e.g. 34"
           />
           {errors?.chest && (
             <p id="error-chest" className="mt-1 text-xs text-[#C41E3A]">
@@ -95,13 +95,13 @@ export default function MeasurementForm({
             htmlFor="measurement-waist"
             className="block text-xs font-medium text-[#1C1C1C] mb-1"
           >
-            Waist (cm) *
+            Waist (inches) *
           </label>
           <input
             id="measurement-waist"
             type="number"
-            min={40}
-            max={130}
+            min={1}
+            max={300}
             step={0.1}
             value={value.waist || ""}
             onChange={(e) => update("waist", parseFloat(e.target.value) || 0)}
@@ -110,7 +110,7 @@ export default function MeasurementForm({
             className={`w-full rounded border bg-white px-3 py-2 text-sm text-[#1C1C1C] placeholder:text-[#6B6B6B]/80 focus:outline-none focus:ring-2 focus:ring-[#800020] ${
               errors?.waist ? "border-[#C41E3A]" : "border-[#E5D5C5]"
             }`}
-            placeholder="e.g. 74.0"
+            placeholder="e.g. 28"
           />
           {errors?.waist && (
             <p id="error-waist" className="mt-1 text-xs text-[#C41E3A]">
@@ -119,31 +119,63 @@ export default function MeasurementForm({
           )}
         </div>
 
-        {/* Full Height */}
+        {/* Full Height — feet + inches */}
         <div>
-          <label
-            htmlFor="measurement-full_height"
-            className="block text-xs font-medium text-[#1C1C1C] mb-1"
-          >
-            Full Height (cm) *
+          <label className="block text-xs font-medium text-[#1C1C1C] mb-1">
+            Full Height *
           </label>
-          <input
-            id="measurement-full_height"
-            type="number"
-            min={100}
-            max={220}
-            step={0.1}
-            value={value.full_height || ""}
-            onChange={(e) =>
-              update("full_height", parseFloat(e.target.value) || 0)
-            }
-            aria-invalid={!!errors?.full_height}
-            aria-describedby={errors?.full_height ? "error-full_height" : undefined}
-            className={`w-full rounded border bg-white px-3 py-2 text-sm text-[#1C1C1C] placeholder:text-[#6B6B6B]/80 focus:outline-none focus:ring-2 focus:ring-[#800020] ${
-              errors?.full_height ? "border-[#C41E3A]" : "border-[#E5D5C5]"
-            }`}
-            placeholder="e.g. 165.0"
-          />
+          <div className="flex items-center gap-2">
+            <div className="flex-1">
+              <label htmlFor="measurement-height-feet" className="sr-only">
+                Height in feet
+              </label>
+              <input
+                id="measurement-height-feet"
+                type="number"
+                min={0}
+                max={10}
+                step={1}
+                value={Math.min(10, Math.floor((value.full_height || 0) / 12)) || ""}
+                onChange={(e) => {
+                  const feet = Math.max(0, Math.min(10, parseFloat(e.target.value) || 0));
+                  const inches = (value.full_height || 0) % 12;
+                  update("full_height", feet * 12 + inches);
+                }}
+                aria-invalid={!!errors?.full_height}
+                aria-describedby={errors?.full_height ? "error-full_height" : undefined}
+                className={`w-full rounded border bg-white px-3 py-2 text-sm text-[#1C1C1C] placeholder:text-[#6B6B6B]/80 focus:outline-none focus:ring-2 focus:ring-[#800020] ${
+                  errors?.full_height ? "border-[#C41E3A]" : "border-[#E5D5C5]"
+                }`}
+                placeholder="e.g. 5"
+              />
+            </div>
+            <span className="text-xs text-[#6B6B6B]">ft</span>
+            <div className="flex-1">
+              <label htmlFor="measurement-height-inches" className="sr-only">
+                Height in inches
+              </label>
+              <input
+                id="measurement-height-inches"
+                type="number"
+                min={0}
+                max={11}
+                step={1}
+                value={(value.full_height || 0) % 12 || ""}
+                onChange={(e) => {
+                  const inches = Math.max(0, Math.min(11, Math.round(parseFloat(e.target.value) || 0)));
+                  const feet = Math.min(10, Math.floor((value.full_height || 0) / 12));
+                  update("full_height", feet * 12 + inches);
+                }}
+                aria-invalid={!!errors?.full_height}
+                aria-describedby={errors?.full_height ? "error-full_height" : undefined}
+                className={`w-full rounded border bg-white px-3 py-2 text-sm text-[#1C1C1C] placeholder:text-[#6B6B6B]/80 focus:outline-none focus:ring-2 focus:ring-[#800020] ${
+                  errors?.full_height ? "border-[#C41E3A]" : "border-[#E5D5C5]"
+                }`}
+                placeholder="e.g. 6"
+              />
+            </div>
+            <span className="text-xs text-[#6B6B6B]">in</span>
+          </div>
           {errors?.full_height && (
             <p id="error-full_height" className="mt-1 text-xs text-[#C41E3A]">
               {errors.full_height}
@@ -157,13 +189,13 @@ export default function MeasurementForm({
             htmlFor="measurement-shoulder"
             className="block text-xs font-medium text-[#1C1C1C] mb-1"
           >
-            Shoulder (cm) *
+            Shoulder (inches) *
           </label>
           <input
             id="measurement-shoulder"
             type="number"
-            min={25}
-            max={70}
+            min={1}
+            max={300}
             step={0.1}
             value={value.shoulder || ""}
             onChange={(e) =>
@@ -174,7 +206,7 @@ export default function MeasurementForm({
             className={`w-full rounded border bg-white px-3 py-2 text-sm text-[#1C1C1C] placeholder:text-[#6B6B6B]/80 focus:outline-none focus:ring-2 focus:ring-[#800020] ${
               errors?.shoulder ? "border-[#C41E3A]" : "border-[#E5D5C5]"
             }`}
-            placeholder="e.g. 40.0"
+            placeholder="e.g. 14"
           />
           {errors?.shoulder && (
             <p id="error-shoulder" className="mt-1 text-xs text-[#C41E3A]">

@@ -136,3 +136,19 @@ export function getPaymentMethodLabel(method: string): string {
   };
   return labels[method] ?? method;
 }
+
+/**
+ * Human-readable label for the order confirmation method.
+ */
+export function getConfirmationMethodLabel(method: string): string {
+  return method === "whatsapp" ? "WhatsApp" : "Online";
+}
+
+/**
+ * Badge color class for the confirmation method.
+ */
+export function getConfirmationMethodColor(method: string): string {
+  return method === "whatsapp"
+    ? "bg-green-100 text-green-800"
+    : "bg-stone-100 text-stone-700";
+}

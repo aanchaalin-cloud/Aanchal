@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/context/CartContext";
 import { formatPrice } from "@/lib/utils";
@@ -30,13 +30,27 @@ const INDIAN_STATES = [
   "Delhi","Jammu & Kashmir","Ladakh","Puducherry","Chandigarh",
 ];
 
+// Phase 1 launch: online payment is disabled. Customers confirm orders on
+// WhatsApp, and the owner confirms them manually. WhatsApp mode is the DEFAULT
+// — it only switches to online payment when NEXT_PUBLIC_CHECKOUT_MODE=payment
+// is explicitly set, so a build that forgets the env never hits the payment
+// path (which needs real Razorpay/Paytm keys). The server enforces the same
+// flag, so the browser cannot opt out of the manual flow.
+const IS_WHATSAPP_MODE = process.env.NEXT_PUBLIC_CHECKOUT_MODE !== "payment";
+
 const STEPS = [
   { id: 1, label: "Information", icon: User },
   { id: 2, label: "Measurements", icon: Ruler },
-  { id: 3, label: "Payment", icon: CreditCard },
+  { id: 3, label: IS_WHATSAPP_MODE ? "Confirm" : "Payment", icon: IS_WHATSAPP_MODE ? Check : CreditCard },
 ];
 
 type FormErrors = Partial<Record<keyof CheckoutFormData | "chest" | "waist" | "full_height" | "shoulder", string>>;
+
+function formatHeight(totalInches: number): string {
+  const feet = Math.floor(totalInches / 12);
+  const inches = Math.round(totalInches % 12);
+  return `${feet}' ${inches}"`;
+}
 
 function validateStep1(data: CheckoutFormData): FormErrors {
   const errors: FormErrors = {};
@@ -52,10 +66,10 @@ function validateStep1(data: CheckoutFormData): FormErrors {
 
 function validateStep2(data: MeasurementData): FormErrors {
   const errors: FormErrors = {};
-  if (!data.chest || data.chest < 50 || data.chest > 150) errors.chest = "Chest must be 50-150 cm";
-  if (!data.waist || data.waist < 40 || data.waist > 130) errors.waist = "Waist must be 40-130 cm";
-  if (!data.full_height || data.full_height < 100 || data.full_height > 220) errors.full_height = "Height must be 100-220 cm";
-  if (!data.shoulder || data.shoulder < 25 || data.shoulder > 70) errors.shoulder = "Shoulder must be 25-70 cm";
+  if (!data.chest || data.chest < 1 || data.chest > 300) errors.chest = "Chest must be 1-300 inches";
+  if (!data.waist || data.waist < 1 || data.waist > 300) errors.waist = "Waist must be 1-300 inches";
+  if (!data.full_height || data.full_height < 1 || data.full_height > 120) errors.full_height = "Height must be up to 10 feet (120 inches)";
+  if (!data.shoulder || data.shoulder < 1 || data.shoulder > 300) errors.shoulder = "Shoulder must be 1-300 inches";
   return errors;
 }
 
@@ -63,7 +77,6 @@ export default function CheckoutPage() {
   const router = useRouter();
   const { items, isHydrated, clearCart } = useCart();
   const [step, setStep] = useState(1);
-  const idempotencyKey = useRef<string | null>(null);
 
   const [form, setForm] = useState<CheckoutFormData>({
     customer_name: "",
@@ -81,7 +94,7 @@ export default function CheckoutPage() {
     waist: 0,
     full_height: 0,
     shoulder: 0,
-    unit: "cm",
+    unit: "inches",
     personalisation_request: "",
   });
   const [paymentMethod, setPaymentMethod] = useState<"prepaid" | "cod">("prepaid");
@@ -171,7 +184,7 @@ export default function CheckoutPage() {
     setCouponError(null);
   };
 
-  const shippingFee = 99;
+  const shippingFee = 0;
   const discountedSubtotal = Math.max(0, displaySubtotal - couponDiscount);
   const totalAmount = discountedSubtotal + shippingFee;
   const prepaidAmount = paymentMethod === "cod" ? Math.ceil(totalAmount / 2) : totalAmount;
@@ -191,6 +204,8 @@ export default function CheckoutPage() {
   const handleSubmit = async () => {
     setApiError(null);
 
+    if (loading) return;
+
     if (items.length === 0) {
       setApiError(Messages.emptyCart);
       return;
@@ -201,7 +216,9 @@ export default function CheckoutPage() {
     const allErrors = { ...stepErrors, ...measureErrors };
     if (Object.keys(allErrors).length > 0) {
       setErrors(allErrors);
-      setStep(1);
+      // Take the user to the step that actually has errors instead of always
+      // jumping back to step 1 (which would hide measurement errors).
+      setStep(Object.keys(measureErrors).length > 0 ? 2 : 1);
       return;
     }
 
@@ -214,9 +231,20 @@ export default function CheckoutPage() {
         quantity: item.quantity,
       }));
 
-      if (!idempotencyKey.current) {
-        idempotencyKey.current = `co-${crypto.randomUUID()}`;
-      }
+      // Deterministic idempotency key derived from everything that affects the
+      // order. Re-submitting identical checkout data reuses the SAME key (so
+      // the server resumes the pending order instead of duplicating it), while
+      // changing the payment method / coupon / referral / cart / measurements
+      // produces a fresh key — preventing a stale order from being charged the
+      // wrong amount after the customer changed their selection.
+      const idempotencyKey = `co-${[
+        IS_WHATSAPP_MODE ? "whatsapp" : paymentMethod,
+        couponApplied ? couponCode.trim().toUpperCase() : "",
+        referralCode.trim().toUpperCase() || "",
+        cartItems.map((i) => `${i.productId}:${i.variantId}:${i.quantity}`).join(","),
+        `${measurements.chest}|${measurements.waist}|${measurements.full_height}|${measurements.shoulder}`,
+        form.customer_email.trim().toLowerCase(),
+      ].join("|")}`;
 
       const res = await fetch("/api/checkout/create-order", {
         method: "POST",
@@ -224,11 +252,11 @@ export default function CheckoutPage() {
         body: JSON.stringify({
           ...form,
           measurements,
-          payment_method: paymentMethod,
+          payment_method: IS_WHATSAPP_MODE ? undefined : paymentMethod,
           coupon_code: couponApplied ? couponCode.trim() : undefined,
           referral_code: referralCode.trim() || undefined,
           cartItems,
-          idempotency_key: idempotencyKey.current,
+          idempotency_key: idempotencyKey,
         }),
       });
 
@@ -240,7 +268,11 @@ export default function CheckoutPage() {
         return;
       }
 
-      const orderData = data.data as RazorpayOrderResponse;
+      const orderData = data.data as RazorpayOrderResponse & {
+        confirmationMethod?: "whatsapp";
+        orderNumber?: string | null;
+        whatsappUrl?: string | null;
+      };
 
       const goToStatus = () => {
         clearCart();
@@ -251,15 +283,36 @@ export default function CheckoutPage() {
         router.push(`/order-success?${params.toString()}`);
       };
 
+      // Phase 1: the order is created server-side and awaiting manual WhatsApp
+      // confirmation. Redirect the customer straight to WhatsApp with the
+      // custom message pre-filled. If the link is somehow missing, fall back to
+      // the order-success page (which also shows the message + open button).
+      if (orderData.confirmationMethod === "whatsapp") {
+        clearCart();
+        if (orderData.whatsappUrl) {
+          window.location.href = orderData.whatsappUrl;
+        } else {
+          goToStatus();
+        }
+        return;
+      }
+
       // Already paid in a previous attempt — go straight to the status page.
       if (orderData.alreadyPaid) {
         goToStatus();
         return;
       }
 
-      // Paytm — redirect to the Paytm payment page.
+      // Paytm — remember the pending order and redirect to Paytm WITHOUT
+      // clearing the cart (payment is not confirmed yet; an abandoned/declined
+      // payment must not destroy the cart). CartClearer on order-success
+      // clears it once the order is confirmed.
       if (orderData.paymentGateway === "paytm" && orderData.paytm) {
-        clearCart();
+        try {
+          sessionStorage.setItem("aanchal_pending_order", orderData.orderId);
+        } catch {
+          // Non-fatal — cart simply survives until the next checkout.
+        }
         window.location.href = orderData.paytm.redirectUrl;
         return;
       }
@@ -439,35 +492,55 @@ export default function CheckoutPage() {
               />
             )}
 
-            {/* STEP 3: Payment & Review */}
+            {/* STEP 3: Review & Confirm */}
             {step === 3 && (
               <>
-                {/* Payment Method */}
+                {/* Payment */}
                 <section className="bg-white rounded-sm border border-[#E5D5C5]/50 p-6">
-                  <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-widest text-[#1C1C1C]">
-                    <CreditCard className="h-4 w-4 text-[#95271D]" />
-                    Payment Method
-                  </h2>
-                  <div className="space-y-3">
-                    <PaymentOption
-                      selected={paymentMethod === "prepaid"}
-                      onClick={() => setPaymentMethod("prepaid")}
-                      title="Full Prepaid"
-                      subtitle="Pay 100% online now"
-                      badge="5% OFF"
-                      badgeColor="bg-green-100 text-green-800"
-                      savings={`Save ${formatPrice(Math.round(displaySubtotal * 0.05))}`}
-                    />
-                    <PaymentOption
-                      selected={paymentMethod === "cod"}
-                      onClick={() => setPaymentMethod("cod")}
-                      title="50% Prepaid + 50% COD"
-                      subtitle="Pay half now, half on delivery"
-                      badge="COD"
-                      badgeColor="bg-orange-100 text-orange-800"
-                      savings={`Pay ${formatPrice(Math.ceil(totalAmount / 2))} now`}
-                    />
-                  </div>
+                  {IS_WHATSAPP_MODE ? (
+                    <>
+                      <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-widest text-[#1C1C1C]">
+                        <CreditCard className="h-4 w-4 text-[#95271D]" />
+                        Payment
+                      </h2>
+                      <div className="rounded-sm bg-[#FFF0E8] p-4">
+                        <p className="text-sm text-[#1C1C1C]">
+                          No payment is taken on the website right now.
+                        </p>
+                        <p className="mt-1 text-xs text-[#6B6B6B]">
+                          Payment will be confirmed separately by Aanchal after your
+                          order is confirmed on WhatsApp.
+                        </p>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-widest text-[#1C1C1C]">
+                        <CreditCard className="h-4 w-4 text-[#95271D]" />
+                        Payment Method
+                      </h2>
+                      <div className="space-y-3">
+                        <PaymentOption
+                          selected={paymentMethod === "prepaid"}
+                          onClick={() => setPaymentMethod("prepaid")}
+                          title="Full Prepaid"
+                          subtitle="Pay 100% online now"
+                          badge="5% OFF"
+                          badgeColor="bg-green-100 text-green-800"
+                          savings={`Save ${formatPrice(Math.round(displaySubtotal * 0.05))}`}
+                        />
+                        <PaymentOption
+                          selected={paymentMethod === "cod"}
+                          onClick={() => setPaymentMethod("cod")}
+                          title="50% Prepaid + 50% COD"
+                          subtitle="Pay half now, half on delivery"
+                          badge="COD"
+                          badgeColor="bg-orange-100 text-orange-800"
+                          savings={`Pay ${formatPrice(Math.ceil(totalAmount / 2))} now`}
+                        />
+                      </div>
+                    </>
+                  )}
                 </section>
 
                 {/* Order Summary */}
@@ -507,9 +580,9 @@ export default function CheckoutPage() {
                     )}
                     <div className="flex justify-between text-[#6B6B6B]">
                       <span className="flex items-center gap-1"><Truck className="h-3 w-3" /> Shipping</span>
-                      <span>{formatPrice(shippingFee)}</span>
+                      <span className="font-medium text-[#800020]">{shippingFee === 0 ? "Free" : formatPrice(shippingFee)}</span>
                     </div>
-                    {paymentMethod === "prepaid" && displaySubtotal > 0 && (
+                    {paymentMethod === "prepaid" && !IS_WHATSAPP_MODE && displaySubtotal > 0 && (
                       <div className="flex justify-between text-green-600">
                         <span>Prepaid discount (5%)</span>
                         <span>-{formatPrice(Math.round(totalAmount * 0.05))}</span>
@@ -517,7 +590,7 @@ export default function CheckoutPage() {
                     )}
                     <div className="border-t border-[#E5D5C5]/50 pt-2 flex justify-between font-semibold text-[#1C1C1C]">
                       <span>Total</span>
-                      <span>{formatPrice(paymentMethod === "prepaid" ? Math.round(totalAmount * 0.95) : totalAmount)}</span>
+                      <span>{formatPrice(IS_WHATSAPP_MODE ? totalAmount : (paymentMethod === "prepaid" ? Math.round(totalAmount * 0.95) : totalAmount))}</span>
                     </div>
                     {paymentMethod === "cod" && (
                       <div className="space-y-1 text-xs">
@@ -535,7 +608,7 @@ export default function CheckoutPage() {
 
                   <div className="mt-3 rounded-sm bg-[#FFF0E8] p-3">
                     <p className="text-xs text-[#6B6B6B]">
-                      Custom fit: Chest {measurements.chest} cm, Waist {measurements.waist} cm, Height {measurements.full_height} cm, Shoulder {measurements.shoulder} cm
+                      Custom fit: Chest {measurements.chest} in, Waist {measurements.waist} in, Height {formatHeight(measurements.full_height)}, Shoulder {measurements.shoulder} in
                     </p>
                     {measurements.personalisation_request && (
                       <p className="mt-1 text-xs text-[#6B6B6B] italic">
@@ -567,10 +640,18 @@ export default function CheckoutPage() {
                 </Button>
               ) : (
                 <Button type="submit" loading={loading} disabled={items.length === 0}>
-                  {loading ? "Processing..." : paymentMethod === "cod" ? "Place Order" : "Pay Securely"}
+                  {loading
+                    ? IS_WHATSAPP_MODE ? "Preparing your order…" : "Processing..."
+                    : IS_WHATSAPP_MODE ? "Confirm Order" : paymentMethod === "cod" ? "Place Order" : "Pay Securely"}
                 </Button>
               )}
             </div>
+            {step === 3 && IS_WHATSAPP_MODE && (
+              <p className="text-center text-xs text-[#6B6B6B]">
+                No payment is taken here. After confirming, you&apos;ll be asked to send your
+                order on WhatsApp — our team will confirm it manually.
+              </p>
+            )}
           </div>
 
           {/* Sidebar */}
@@ -648,7 +729,7 @@ export default function CheckoutPage() {
                 )}
                 <div className="flex justify-between text-[#6B6B6B]">
                   <span>Shipping</span>
-                  <span>{formatPrice(shippingFee)}</span>
+                  <span className="font-medium text-[#800020]">{shippingFee === 0 ? "Free" : formatPrice(shippingFee)}</span>
                 </div>
               </div>
 

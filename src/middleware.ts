@@ -22,6 +22,6 @@ export const config = {
      * - Public files in /public
      * - /api/* (API routes handle their own auth via service client)
      */
-    "/((?!_next/static|_next/image|favicon.ico|api/.*|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|api/.*|.*\\.(?:svg|png|jpg|jpeg|gif|webp|mp4|webm|woff|woff2)$).*)",
   ],
 };

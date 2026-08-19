@@ -85,7 +85,7 @@ App:
 NEXT_PUBLIC_BASE_URL=http://localhost:3000
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 NEXT_PUBLIC_SITE_NAME=Aanchal
-NEXT_PUBLIC_WHATSAPP_NUMBER=+918949911242
+NEXT_PUBLIC_WHATSAPP_NUMBER=+917742719732
 ```
 
 Shipping (optional — enables "Create Shipment" on admin orders):

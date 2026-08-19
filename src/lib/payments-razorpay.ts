@@ -1,4 +1,4 @@
-import { hmacHex } from "@/lib/crypto";
+import { hmacHex, timingSafeEqualUtf8 } from "@/lib/crypto";
 import type { PaymentProviderAdapter, VerifyResult, CreateOrderResult } from "./payments-types";
 import Razorpay from "razorpay";
 
@@ -11,7 +11,7 @@ const adapter: PaymentProviderAdapter = {
     if (!providerOrderId || !providerPaymentId || !signature) return { success: false, code: "INVALID", message: "Missing params" };
 
     const expected = hmacHex(secret, `${providerOrderId}|${providerPaymentId}`);
-    if (expected !== signature) return { success: false, code: "SIG", message: "Signature mismatch" };
+    if (!timingSafeEqualUtf8(expected, signature)) return { success: false, code: "SIG", message: "Signature mismatch" };
 
     const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
     let amountPaise: number | null = null;
