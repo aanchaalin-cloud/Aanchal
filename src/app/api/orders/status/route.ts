@@ -7,9 +7,10 @@ import { sendOrderEvent } from "@/lib/notifications/order-events";
 import { info, warn } from "@/lib/logger";
 
 const statusSchema = z.object({
-  orderId: z.string().uuid("Invalid order ID"),
+  orderId: z.string().optional(),
+  orderNumber: z.string().optional(),
   email: z.string().email("Invalid email address").max(200),
-});
+}).refine((d) => d.orderId || d.orderNumber, "Provide either orderId or orderNumber");
 
 const ORDER_STATUS_RANK: Record<string, number> = {
   pending: 0,
@@ -38,7 +39,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const supabase = await createServiceClient();
 
-  const { data: order } = await supabase
+  let query = supabase
     .from("orders")
     .select(
       `
@@ -46,6 +47,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       subtotal, shipping_fee, total_amount, discount_amount, prepaid_amount, cod_amount,
       address_line1, address_line2, city, state, pincode,
       created_at, shipped_at, delivered_at, tracking_id, tracking_url, shipping_provider,
+      estimated_delivery_date,
       shiprocket_shipment_id,
       order_items (
         product_id, product_name, product_slug, image_url, size, color, unit_price, quantity, line_total
@@ -55,9 +57,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       )
     `
     )
-    .eq("id", data.orderId)
-    .eq("customer_email", data.email.toLowerCase())
-    .maybeSingle();
+    .eq("customer_email", data.email.toLowerCase());
+
+  if (data.orderId) {
+    query = query.eq("id", data.orderId);
+  } else if (data.orderNumber) {
+    query = query.eq("order_number", data.orderNumber);
+  }
+
+  const { data: order } = await query.maybeSingle();
 
   if (!order) {
     return NextResponse.json(

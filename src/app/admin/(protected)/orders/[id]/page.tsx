@@ -33,6 +33,10 @@ export default async function AdminOrderDetailPage({ params }: Props) {
           orderId={order.id}
           currentStatus={order.order_status}
           packagingStatus={order.packaging_status}
+          existingTrackingId={order.tracking_id}
+          existingTrackingUrl={order.tracking_url}
+          existingShippingProvider={order.shipping_provider}
+          existingEstimatedDeliveryDate={order.estimated_delivery_date}
         />
         <CreateShipmentButton orderId={order.id} />
         {order.shiprocket_shipment_id && <GenerateLabelButton orderId={order.id} />}
@@ -237,8 +241,29 @@ export default async function AdminOrderDetailPage({ params }: Props) {
               {order.shipped_at && <div className="flex justify-between"><span className="text-stone-600">Shipped</span><span>{formatDate(order.shipped_at)}</span></div>}
               {order.delivered_at && <div className="flex justify-between"><span className="text-stone-600">Delivered</span><span>{formatDate(order.delivered_at)}</span></div>}
               {order.cancelled_at && <div className="flex justify-between"><span className="text-stone-600">Cancelled</span><span>{formatDate(order.cancelled_at)}</span></div>}
-              {order.tracking_id && <div><p className="text-stone-600">Tracking</p><p className="font-mono text-xs break-all">{order.tracking_id}</p></div>}
-              {order.shipping_provider && <div><p className="text-stone-600">Carrier</p><p className="text-xs">{order.shipping_provider}</p></div>}
+              {(order.tracking_id || order.shipping_provider || order.estimated_delivery_date) && (
+                <div className="rounded bg-blue-50 border border-blue-200 p-3 space-y-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-blue-700">Shipment</p>
+                  {order.shipping_provider && <div className="flex justify-between text-sm"><span className="text-stone-600">Courier</span><span className="font-medium">{order.shipping_provider}</span></div>}
+                  {order.tracking_id && (
+                    <div className="text-sm">
+                      <span className="text-stone-600">Tracking</span>
+                      <p className="font-mono text-xs break-all mt-0.5">{order.tracking_id}</p>
+                      {order.tracking_url && (
+                        <a href={order.tracking_url} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-[#95271D] hover:underline mt-0.5 inline-block">
+                          Track with courier →
+                        </a>
+                      )}
+                    </div>
+                  )}
+                  {order.estimated_delivery_date && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-stone-600">Est. Delivery</span>
+                      <span className="font-medium">{new Date(order.estimated_delivery_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span>
+                    </div>
+                  )}
+                </div>
+              )}
               {order.influencer_code && (
                 <div>
                   <p className="text-stone-600">Influencer Code</p>

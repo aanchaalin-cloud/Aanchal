@@ -73,6 +73,7 @@ type OrderData = {
   tracking_url: string | null;
   shipping_provider: string | null;
   tracking_events?: TrackingEvent[];
+  estimated_delivery_date: string | null;
   order_items: OrderItem[];
   order_status_history: HistoryEntry[];
 };
@@ -103,15 +104,21 @@ function TrackOrderContent() {
   const [cancelResult, setCancelResult] = useState<{ message: string; refundNote?: string } | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
 
-  const fetchOrder = async (id: string, emailInput: string, token?: string) => {
+  const fetchOrder = async (id: string, emailInput: string) => {
     setLoading(true);
     setError(null);
     setOrder(null);
     try {
+      // Determine if input is UUID or order number
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+      const body: Record<string, string> = { email: emailInput };
+      if (isUuid) body.orderId = id;
+      else body.orderNumber = id;
+
       const res = await fetch("/api/orders/status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId: id, email: emailInput, statusToken: token }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
@@ -129,7 +136,7 @@ function TrackOrderContent() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!orderId.trim() || !email.trim()) {
-      setError("Enter both your order ID and email.");
+      setError("Enter both your order number and email.");
       return;
     }
     setCancelResult(null);
@@ -166,7 +173,7 @@ function TrackOrderContent() {
       }
       setCancelResult(data.data);
       setConfirmCancel(false);
-      await fetchOrder(order.id, email, statusToken || undefined);
+      await fetchOrder(order.id, email);
     } catch {
       setError("Network error. Please try again.");
     } finally {
@@ -177,7 +184,7 @@ function TrackOrderContent() {
   // Auto-fetch when arriving from account links with query params.
   useEffect(() => {
     if (initialOrderId && initialEmail) {
-      fetchOrder(initialOrderId, initialEmail, initialStatusToken || undefined);
+      fetchOrder(initialOrderId, initialEmail);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -187,7 +194,7 @@ function TrackOrderContent() {
       <div className="text-center">
         <h1 className="font-display text-3xl text-[#1C1C1C]">Track Your Order</h1>
         <p className="mt-2 text-sm text-[#6B6B6B]">
-          Enter your order ID and the email you used at checkout to see the latest status.
+          Enter your order number (e.g. ANC-XXXXXX) and the email you used at checkout to see the latest status.
         </p>
       </div>
 
@@ -198,14 +205,14 @@ function TrackOrderContent() {
       >
         <div className="sm:col-span-1">
           <label htmlFor="order-id" className="mb-1 block text-xs font-medium text-[#1C1C1C]">
-            Order ID
+            Order Number or ID
           </label>
           <input
             id="order-id"
             type="text"
             value={orderId}
             onChange={(e) => setOrderId(e.target.value)}
-            placeholder="e.g. abc123..."
+            placeholder="e.g. ANC-XXXXXX"
             className="w-full rounded border border-[#E5D5C5] bg-white px-3 py-2 text-sm text-[#1C1C1C] placeholder:text-[#6B6B6B]/80 focus:outline-none focus:ring-2 focus:ring-[#95271D]"
           />
         </div>
@@ -310,13 +317,15 @@ function TrackOrderContent() {
             )}
 
             {/* Tracking info */}
-            {order.tracking_id && (
+            {(order.tracking_id || order.estimated_delivery_date) && (
               <div className="mt-4 flex items-center gap-3 rounded-sm bg-[#FFF0E8] p-3 text-sm">
                 <Truck className="h-5 w-5 text-[#95271D]" />
                 <div>
-                  <p className="text-[#1C1C1C]">
-                    {order.shipping_provider ?? "Courier"}: <span className="font-mono">{order.tracking_id}</span>
-                  </p>
+                  {order.tracking_id && (
+                    <p className="text-[#1C1C1C]">
+                      {order.shipping_provider ?? "Courier"}: <span className="font-mono">{order.tracking_id}</span>
+                    </p>
+                  )}
                   {order.tracking_url && (
                     <a
                       href={order.tracking_url}
@@ -326,6 +335,18 @@ function TrackOrderContent() {
                     >
                       Track with courier →
                     </a>
+                  )}
+                  {order.estimated_delivery_date && (
+                    <p className="mt-1 text-xs text-[#6B6B6B]">
+                      Estimated delivery:{" "}
+                      <span className="font-medium text-[#1C1C1C]">
+                        {new Date(order.estimated_delivery_date).toLocaleDateString("en-IN", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </span>
+                    </p>
                   )}
                 </div>
               </div>

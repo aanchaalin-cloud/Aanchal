@@ -33,6 +33,7 @@ const updateStatusSchema = z.object({
   tracking_id: z.string().max(200).optional(),
   tracking_url: safeUrl.optional(),
   shipping_provider: z.string().max(100).optional(),
+  estimated_delivery_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date format").optional(),
   packaging_status: z.enum(["pending", "packed", "ready_for_pickup"]).optional(),
 });
 
@@ -76,6 +77,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (data.tracking_id) updatePayload.tracking_id = data.tracking_id;
   if (data.tracking_url) updatePayload.tracking_url = data.tracking_url;
   if (data.shipping_provider) updatePayload.shipping_provider = data.shipping_provider;
+  if (data.estimated_delivery_date) updatePayload.estimated_delivery_date = data.estimated_delivery_date;
   if (data.packaging_status) updatePayload.packaging_status = data.packaging_status;
 
   // Set timestamps based on status transitions
