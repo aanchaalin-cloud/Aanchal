@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef, useEffect, useCallback, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -48,34 +49,143 @@ function CollectionCard({
   );
 }
 
-export function CollectionsScroller({ collections }: { collections: CollectionItem[] }) {
-  return (
-    <>
-      {/* Mobile: touch-swipeable horizontal scroll */}
-      <div className="lg:hidden overflow-x-auto scrollbar-hidden -mx-4 px-4">
-        <div className="flex gap-4 pb-4" style={{ scrollSnapType: "x mandatory" }}>
-          {collections.map((item, idx) => (
-            <div key={item.image} style={{ scrollSnapAlign: "start" }}>
-              <CollectionCard item={item} priority={idx < 3} />
-            </div>
-          ))}
-        </div>
-      </div>
+const RESUME_DELAY_MS = 4000;
+const SCROLL_DURATION_S = 45;
 
-      {/* Desktop: auto-scrolling marquee */}
-      <div className="hidden lg:block marquee-track flex w-max">
-        {[0, 1].map((copy) => (
-          <div key={copy} className="flex gap-6 pr-6" aria-hidden={copy === 1}>
-            {collections.map((item, idx) => (
-              <CollectionCard
-                key={`${item.image}-${copy}`}
-                item={item}
-                priority={copy === 0 && idx < 3}
-              />
-            ))}
-          </div>
+export function CollectionsScroller({
+  collections,
+}: {
+  collections: CollectionItem[];
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const rafRef = useRef(0);
+  const autoScrollRef = useRef(true);
+  const interactingRef = useRef(false);
+  const resumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTimeRef = useRef(0);
+  const oneSetWidthRef = useRef(0);
+  const [reducedMotion, setReducedMotion] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReducedMotion(mq.matches);
+    const onChange = (e: MediaQueryListEvent) => setReducedMotion(e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track || collections.length === 0) return;
+
+    const measure = () => {
+      const children = Array.from(track.children) as HTMLElement[];
+      const dup = collections.length;
+      if (children.length <= dup) return;
+      const firstRect = children[0].getBoundingClientRect();
+      const midRect = children[dup].getBoundingClientRect();
+      oneSetWidthRef.current = midRect.left - firstRect.left;
+    };
+
+    const raf = requestAnimationFrame(measure);
+    const observer = new ResizeObserver(measure);
+    observer.observe(track);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      observer.disconnect();
+    };
+  }, [collections.length]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || reducedMotion || collections.length === 0) return;
+
+    const animate = (now: number) => {
+      if (autoScrollRef.current && !interactingRef.current) {
+        const oneSet = oneSetWidthRef.current;
+        if (oneSet > 0 && container.scrollWidth > container.clientWidth) {
+          const dt = lastTimeRef.current > 0 ? (now - lastTimeRef.current) / 1000 : 0;
+          container.scrollLeft += (oneSet / SCROLL_DURATION_S) * dt;
+          if (container.scrollLeft >= oneSet) {
+            container.scrollLeft -= oneSet;
+          }
+        }
+      }
+      lastTimeRef.current = now;
+      rafRef.current = requestAnimationFrame(animate);
+    };
+
+    lastTimeRef.current = 0;
+    rafRef.current = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [reducedMotion, collections.length]);
+
+  const handlePointerDown = useCallback(() => {
+    interactingRef.current = true;
+    autoScrollRef.current = false;
+    if (resumeTimerRef.current) {
+      clearTimeout(resumeTimerRef.current);
+      resumeTimerRef.current = null;
+    }
+  }, []);
+
+  const handlePointerUp = useCallback(() => {
+    interactingRef.current = false;
+    if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
+    resumeTimerRef.current = setTimeout(() => {
+      const container = containerRef.current;
+      const oneSet = oneSetWidthRef.current;
+      if (container && oneSet > 0) {
+        container.scrollLeft = container.scrollLeft % oneSet;
+      }
+      lastTimeRef.current = 0;
+      autoScrollRef.current = true;
+    }, RESUME_DELAY_MS);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
+    };
+  }, []);
+
+  const handleMouseEnter = useCallback(() => {
+    if (window.matchMedia("(pointer: fine)").matches) {
+      autoScrollRef.current = false;
+    }
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    if (window.matchMedia("(pointer: fine)").matches && !interactingRef.current) {
+      lastTimeRef.current = 0;
+      autoScrollRef.current = true;
+    }
+  }, []);
+
+  const items = [...collections, ...collections];
+
+  return (
+    <div
+      ref={containerRef}
+      className="overflow-x-auto scrollbar-hidden"
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      <div ref={trackRef} className="flex gap-6 w-max py-1">
+        {items.map((item, idx) => (
+          <CollectionCard
+            key={`${item.image}-${idx}`}
+            item={item}
+            priority={idx < 3}
+          />
         ))}
       </div>
-    </>
+    </div>
   );
 }
